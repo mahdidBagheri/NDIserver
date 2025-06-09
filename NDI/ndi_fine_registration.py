@@ -9,9 +9,6 @@ from typing import List, Dict, Any, Optional, Tuple
 import open3d as o3d
 from threading import Event
 
-# Setup logging
-import Config.Addresses
-
 logger = logging.getLogger(__name__)
 
 tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
@@ -319,7 +316,7 @@ class FineRegistration:
             }
 
         # Use the path for CT point cloud
-        ct_pc_path = f"{Config.Addresses.root_dir}/preprocessing/0/CT_pc.npy"
+        ct_pc_path = f"CT_pc.npy"
 
         # Check if CT point cloud exists
         if not os.path.exists(ct_pc_path):
