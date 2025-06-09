@@ -11,12 +11,12 @@ from threading import Event
 import json
 
 # Import our custom modules
-from Tracking.NDI.ndi_coarse_registration import CoarseRegistration
-from Tracking.NDI.ndi_fine_registration import FineRegistration
-from Tracking.NDI.ndi_tool_calibration import ToolCalibration
+from NDI.ndi_coarse_registration import CoarseRegistration
+from NDI.ndi_fine_registration import FineRegistration
+from NDI.ndi_tool_calibration import ToolCalibration
 
 # Import NDI tracking module
-from Tracking.NDI import NDI_Tracking
+from NDI import NDI_Tracking
 
 tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
 # Setup logging
