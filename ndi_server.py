@@ -171,6 +171,7 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                     if tracking and len(tracking) > 0:
                         # Get probe matrix
                         probe_matrix = tracking[0]
+                        endospcope_matrix= tracking[2]
 
                         # Calculate probe tip position
                         tool_tip = tip_vector
@@ -194,6 +195,7 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                         # relative to the registered coordinate system
                         if fine_inverse is not None:
                             transformed_matrix = np.linalg.inv(combined_transformation) @ probe_matrix
+                            endoscope_transformed_matrix = np.linalg.inv(combined_transformation) @ endospcope_matrix
 
                         # Create data packet
                         data = {
@@ -204,7 +206,8 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                             "frame": frame_counter,
                             # Quality information not available since GetPosition only returns tracking
                             "matrix": probe_matrix.tolist(),  # Original matrix
-                            "transformed_matrix": transformed_matrix.tolist()
+                            "transformed_matrix": transformed_matrix.tolist(),
+                            "endoscope_transformed_matrix":endoscope_transformed_matrix
                         }
                     else:
                         # No tracking data available
