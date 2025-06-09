@@ -632,7 +632,7 @@ def start_tool_calibration(force_stop_streaming: bool = False, device: bool = 0)
 
     # Start tool calibration
 
-    return tool_calibration.start_calibration(device)
+    return tool_calibration.start_calibration(ndi_tracker=NDI_Tracking.ndi_tracking,device = device)
 
 
 @app.post("/end_tool_calibration")
