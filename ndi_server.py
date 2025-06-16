@@ -614,7 +614,7 @@ def fine_register(id: int, downsample_factor: float = 1.0, visualize: bool = Fal
 
 # Tool calibration endpoints
 @app.post("/start_tool_calibration")
-def start_tool_calibration(force_stop_streaming: bool = False, device: bool = 0):
+def start_tool_calibration(force_stop_streaming: bool = False, device: int = 0):
     """Start collecting tool transformation matrices for calibration"""
     global streaming_active, tool_calibration
 
