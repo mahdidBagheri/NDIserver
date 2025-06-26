@@ -366,14 +366,8 @@ class ToolCalibration:
             # Save the result to a file
             try:
                 with open("../constant_vector.txt", "w") as f:
-                    f.write(
-                        f"Tool tip vector in local coordinates: [{mean_x[0]:.6f}, {mean_x[1]:.6f}, {mean_x[2]:.6f}]\n")
-                    f.write(f"Standard deviation: [{std_x[0]:.6f}, {std_x[1]:.6f}, {std_x[2]:.6f}]\n")
-                    f.write(f"Mean error: {np.mean(errors):.6f} units\n")
-                    f.write(f"Max error: {np.max(errors):.6f} units\n")
-                    f.write(f"Pivot center: [{pivot_center[0]:.6f}, {pivot_center[1]:.6f}, {pivot_center[2]:.6f}]\n")
-                    f.write(f"Number of transformations: {len(valid_matrices)}\n")
-                    f.write(f"Coordinate system: {'probe-in-reference' if self.use_reference else 'probe-global'}\n")
+                    f.write(f"{mean_x[0]:.6f},{mean_x[1]:.6f},{mean_x[2]:.6f}")
+
 
                 file_saved = True
             except Exception as e:
@@ -687,3 +681,81 @@ class ToolCalibration:
         except Exception as e:
             logger.error(f"Error saving tool calibration data: {str(e)}")
             return False
+
+    def calculate_touch_point(self, ndi_tracker, probe_tip_vector,
+                                           probe_idx=0, endoscope_idx=2) -> Dict[str, Any]:
+        """
+        Calculate the position of the probe tip in the endoscope's coordinate system
+        when the probe tip touches a point on the endoscope.
+
+        Args:
+            ndi_tracker: NDI tracker object to get transformations from
+            probe_tip_vector: Vector representing the tip of the probe in probe coordinate system
+            probe_idx: Index of probe matrix in tracking data (default: 0)
+            reference_idx: Index of reference matrix in tracking data (default: 1)
+            endoscope_idx: Index of endoscope matrix in tracking data (default: 2)
+
+        Returns:
+            Dict with the point position in endoscope coordinates
+        """
+        try:
+            # Convert probe tip vector to numpy array if it's a list
+            if isinstance(probe_tip_vector, list):
+                probe_tip_vector = np.array(probe_tip_vector)
+
+            # Ensure the vector is 3D
+            if len(probe_tip_vector) != 3:
+                return {
+                    "status": "error",
+                    "message": f"Probe tip vector must be 3D, got {len(probe_tip_vector)} dimensions"
+                }
+
+            # Get tracking data
+            tracking_data = ndi_tracker.GetPosition()
+
+            probe_matrix = tracking_data[probe_idx]
+            endoscope_matrix = tracking_data[endoscope_idx]
+
+            # Check if matrices contain NaN values
+            if np.isnan(probe_matrix).any() or np.isnan(endoscope_matrix).any():
+                return {
+                    "status": "error",
+                    "message": "Tracking matrices contain NaN values"
+                }
+
+            # Calculate probe tip in global coordinates
+            # Convert tip vector to homogeneous coordinates (add 1 as 4th element)
+            probe_tip_homog = np.append(probe_tip_vector, 1)
+
+            # Transform the tip to global coordinates
+            global_point_homog = probe_matrix @ probe_tip_homog
+            global_point = global_point_homog[:3]  # Back to 3D coordinates
+
+            # Transform global coordinates to endoscope coordinates
+            try:
+                endoscope_matrix_inv = np.linalg.inv(endoscope_matrix)
+                global_point_homog = np.append(global_point, 1)  # Make homogeneous
+                endoscope_point_homog = endoscope_matrix_inv @ global_point_homog
+                endoscope_point = endoscope_point_homog[:3]  # Back to 3D coordinates
+            except np.linalg.LinAlgError:
+                return {
+                    "status": "error",
+                    "message": "Could not invert endoscope matrix"
+                }
+
+            logger.info(f"Touch point in endoscope coordinates: {endoscope_point}")
+
+            return {
+                "status": "success",
+                "message": "Calculated touch point in endoscope coordinates",
+                "point_in_endoscope": endoscope_point.tolist(),
+                "point_in_global": global_point.tolist(),
+                "timestamp": time.strftime("%Y%m%d-%H%M%S")
+            }
+
+        except Exception as e:
+            logger.exception("Error calculating point in endoscope coordinates")
+            return {
+                "status": "error",
+                "message": f"Error: {str(e)}"
+            }

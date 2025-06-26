@@ -18,7 +18,15 @@ from NDI.ndi_tool_calibration import ToolCalibration
 # Import NDI tracking module
 from NDI import NDI_Tracking
 
-tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
+try:
+    with open("../constant_vector.txt", "r") as f:
+        lines = f.readlines()
+        l = lines[0]
+        tip_vector = np.array([float(l[0]), float(l[1]), float(l[2]), 1.0])
+except:
+    tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
+
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -798,6 +806,9 @@ def get_latest_position():
         "timestamp": time.time()
     }
 
+@app.get("/get_probe_touchpoint")
+def get_probe_touchpoint(probe_idx: int = 0, endoscope_idx : int = 2 ):
+    return tool_calibration.calculate_touch_point(NDI_Tracking.ndi_tracking, tip_vector, probe_idx=probe_idx, endoscope_idx=endoscope_idx)
 
 @app.on_event("shutdown")
 def shutdown_event():
