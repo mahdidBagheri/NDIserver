@@ -820,6 +820,7 @@ def shutdown_event():
         streaming_stop_event.set()
         logger.info("Stopped streaming during shutdown")
 
+
     # Stop fine gathering if active
     if fine_registration.gathering_active:
         fine_registration.end_fine_gather()
