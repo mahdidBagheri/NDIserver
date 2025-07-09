@@ -168,7 +168,8 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                     "timestamp": time.time(),
                     "frame": frame_counter,
                     "matrix": current_matrix.tolist(),  # Original matrix
-                    "transformed_matrix": transformed_matrix.tolist()  # Matrix with fine_inverse applied from left
+                    "transformed_matrix": transformed_matrix.tolist(),  # Matrix with fine_inverse applied from left
+                    "endoscope_transformed_matrix": np.eye(4).tolist()
                 }
             else:
                 # Use real NDI tracker
@@ -215,7 +216,7 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                             # Quality information not available since GetPosition only returns tracking
                             "matrix": probe_matrix.tolist(),  # Original matrix
                             "transformed_matrix": transformed_matrix.tolist(),
-                            "endoscope_transformed_matrix":endoscope_transformed_matrix
+                            "endoscope_transformed_matrix":endoscope_transformed_matrix.tolist()
                         }
                     else:
                         # No tracking data available
