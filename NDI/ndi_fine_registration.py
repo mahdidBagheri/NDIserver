@@ -43,11 +43,11 @@ class FineRegistration:
         matrices = []
 
         try:
-            if not os.path.exists("fine.txt"):
+            if not os.path.exists("NDI/fine.txt"):
                 logger.error("fine.txt file not found!")
                 return []
 
-            with open("fine.txt", "r") as file:
+            with open("NDI/fine.txt", "r") as file:
                 content = file.read()
 
             logger.info(f"Loaded fine.txt, size: {len(content)} bytes")

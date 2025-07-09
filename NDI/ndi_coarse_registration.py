@@ -45,11 +45,11 @@ class CoarseRegistration:
         original_point_numbers = []
 
         try:
-            if not os.path.exists("coarse.txt"):
+            if not os.path.exists("NDI/coarse.txt"):
                 logger.error("coarse.txt file not found!")
                 return {}
 
-            with open("coarse.txt", "r") as file:
+            with open("NDI/coarse.txt", "r") as file:
                 content = file.read()
 
             logger.info(f"Loaded coarse.txt, size: {len(content)} bytes")
