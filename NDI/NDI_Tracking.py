@@ -9,7 +9,8 @@ class NDI_Tracking():
     "tracker type": "polaris",
     "romfiles" : ["C:/Users/Parsiss99/PlusApp-2.8.0.20191105-Win64/config/NdiToolDefinitions/8700340.rom",
                   "C:/Users/Parsiss99/AppData/Local/Parsiss/FilesOfTrackers/PolarisTrackerFiles/Replacable-Mayfield-Reference/Replacable-Mayfield-Reference.rom",
-                  ""]
+                  # "C:/Users/Parsiss99/AppData/Local/Parsiss/FilesOfTrackers/PolarisTrackerFiles/Registration-Pointer/Registration-Pointer.rom"]
+                  "C:/Users/Parsiss99/AppData/Local/Parsiss/FilesOfTrackers/PolarisTrackerFiles/Short-Attachment-Reference/Short-Attachment-Reference.rom"]
 
         }
 

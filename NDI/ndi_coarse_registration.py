@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class CoarseRegistration:
-    def __init__(self):
+    def __init__(self, tip_vector):
         # Coarse points storage
         self.coarse_points = {
             "unity_points": [],
@@ -29,7 +29,7 @@ class CoarseRegistration:
         self.matrices = {}
 
         # Probe tip position in probe's local coordinates
-        self.tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
+        self.tip_vector = tip_vector
 
         # Parse coarse file on initialization
         self.parse_coarse_file()

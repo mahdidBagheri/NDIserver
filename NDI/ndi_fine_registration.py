@@ -11,7 +11,7 @@ from threading import Event
 
 logger = logging.getLogger(__name__)
 
-tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
+
 class FineRegistration:
     def __init__(self):
         # Fine points storage
@@ -43,11 +43,11 @@ class FineRegistration:
         matrices = []
 
         try:
-            if not os.path.exists("fine.txt"):
+            if not os.path.exists("NDI\\fine.txt"):
                 logger.error("fine.txt file not found!")
                 return []
 
-            with open("fine.txt", "r") as file:
+            with open("NDI\\fine.txt", "r") as file:
                 content = file.read()
 
             logger.info(f"Loaded fine.txt, size: {len(content)} bytes")
@@ -354,8 +354,8 @@ class FineRegistration:
             trans_init = np.eye(4)
             source_copy = copy.deepcopy(source)
             target_copy = copy.deepcopy(target)
-            target_copy.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamKNN(knn=5))
-            source_copy.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamKNN(knn=5))
+            target_copy.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamKNN(knn=13))
+            source_copy.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamKNN(knn=13))
             reg_p2p = o3d.pipelines.registration.registration_icp(
                 target_copy,source_copy , threshold, trans_init,
                 o3d.pipelines.registration.TransformationEstimationPointToPlane()
@@ -363,9 +363,10 @@ class FineRegistration:
 
             # Store the fine registration transformation
             self.fine_transformation_matrix = np.linalg.inv(reg_p2p.transformation)
+            # self.fine_transformation_matrix = reg_p2p.transformation
 
             # Calculate the combined transformation (fine × coarse)
-            combined_transformation = self.fine_transformation_matrix@ initial_transform
+            combined_transformation = self.fine_transformation_matrix @ initial_transform
 
             logger.info(
                 f"Fine registration (ICP) completed with fitness: {reg_p2p.fitness}, RMSE: {reg_p2p.inlier_rmse}")

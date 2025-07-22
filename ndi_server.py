@@ -18,7 +18,16 @@ from NDI.ndi_tool_calibration import ToolCalibration
 # Import NDI tracking module
 from NDI import NDI_Tracking
 
-tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
+try:
+    with open("../constant_vector.txt", "r") as f:
+        lines = f.readlines()
+        l = lines[0]
+        tip_vector = np.array([float(l[0]), float(l[1]), float(l[2]), 1.0])
+except:
+    tip_vector = np.array([0.0, 0.0, -161.148433, 1.0])
+    #tip_vector = np.array([3.330330, 1.016458, -159.1557461, 1.0])
+
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -29,17 +38,17 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="NDI Tracking Server")
 
 # Global configuration
-IS_LOCAL = True  # Default to using local files
+IS_LOCAL = False  # Default to using local files
 ndi_tracker_initialized = False
 
 # Client IP tracking
 client_ip = "127.0.0.1"  # Default to localhost
 
 # Tip position in tool coordinates
-tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
+# tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
 
 # Create module instances
-coarse_registration = CoarseRegistration()
+coarse_registration = CoarseRegistration(tip_vector=tip_vector)
 fine_registration = FineRegistration()
 tool_calibration = ToolCalibration()
 
@@ -197,6 +206,7 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                             transformed_matrix = np.linalg.inv(combined_transformation) @ probe_matrix
                             endoscope_transformed_matrix = np.linalg.inv(combined_transformation) @ endospcope_matrix
 
+
                         # Create data packet
                         data = {
                             "position": transformed_position.tolist(),
@@ -207,7 +217,7 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                             # Quality information not available since GetPosition only returns tracking
                             "matrix": probe_matrix.tolist(),  # Original matrix
                             "transformed_matrix": transformed_matrix.tolist(),
-                            "endoscope_transformed_matrix":endoscope_transformed_matrix
+                            "endoscope_transformed_matrix":endoscope_transformed_matrix.tolist()
                         }
                     else:
                         # No tracking data available
@@ -798,6 +808,9 @@ def get_latest_position():
         "timestamp": time.time()
     }
 
+@app.post("/get_probe_touchpoint")
+def get_probe_touchpoint(probe_idx: int = 0, endoscope_idx : int = 2 ):
+    return tool_calibration.calculate_touch_point(NDI_Tracking.ndi_tracking, tip_vector[0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -808,6 +821,7 @@ def shutdown_event():
     if streaming_active:
         streaming_stop_event.set()
         logger.info("Stopped streaming during shutdown")
+
 
     # Stop fine gathering if active
     if fine_registration.gathering_active:
