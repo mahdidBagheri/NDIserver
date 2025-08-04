@@ -228,9 +228,14 @@ class CoarseRegistration:
         # Calculate the correlation matrix
         H = np.dot(unity_centered.T, ndi_centered)
 
-        # SVD decomposition
-        U, S, Vt = np.linalg.svd(H)
-
+        try :
+            # SVD decomposition
+            U, S, Vt = np.linalg.svd(H)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"SVD failed"
+            }
         # Calculate rotation matrix
         R = np.dot(Vt.T, U.T)
 
@@ -275,6 +280,7 @@ class CoarseRegistration:
             }
 
         return {
+            "status":"success",
             "transformation_matrix": transform.tolist(),
             "rmse": float(rmse),
             "num_points_used": len(unity_points),
