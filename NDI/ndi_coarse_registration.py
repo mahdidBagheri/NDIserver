@@ -180,7 +180,7 @@ class CoarseRegistration:
             "ndi_point": ndi_point.tolist(),
             "unity_point": unity_point_np.tolist(),
             "point_number": point_number,
-            "tip_vector_used": self.tip_vector.tolist()
+            "tip_vector_used": self.tip_vector
         }
 
     def get_coarse_points(self) -> Dict[str, Any]:

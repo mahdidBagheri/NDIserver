@@ -100,13 +100,6 @@ class FineRegistration:
                 "total_points": len(self.fine_points)
             }
 
-        # Validate frequency
-        if frequency < 1 or frequency > 50:
-            return {
-                "status": "error",
-                "message": "Frequency must be between 1 and 50 Hz"
-            }
-
         # Reset points and prepare for gathering
         # self.fine_points = []
         self.gathering_frequency = frequency

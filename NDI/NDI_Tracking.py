@@ -6,9 +6,8 @@ from sksurgerynditracker.nditracker import NDITracker
 last_reference = None
 
 class NDI_Tracking():
-    def __init__(self, ndi_config_path):
-        self.SETTINGS = json.load(ndi_config_path)
-
+    def __init__(self, config):
+        self.SETTINGS = config["device_params"]
 
     def start(self):
         self.TRACKER = NDITracker(self.SETTINGS)
