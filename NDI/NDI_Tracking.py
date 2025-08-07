@@ -1,18 +1,13 @@
+import json
+
 import numpy as np
 from sksurgerynditracker.nditracker import NDITracker
 
 last_reference = None
 
 class NDI_Tracking():
-    def __init__(self):
-        self.SETTINGS = {
-    "tracker type": "polaris",
-    "romfiles" : ["C:/Users/Parsiss99/PlusApp-2.8.0.20191105-Win64/config/NdiToolDefinitions/8700340.rom",
-                  "C:/Users/Parsiss99/AppData/Local/Parsiss/FilesOfTrackers/PolarisTrackerFiles/Replacable-Mayfield-Reference/Replacable-Mayfield-Reference.rom",
-                  # "C:/Users/Parsiss99/AppData/Local/Parsiss/FilesOfTrackers/PolarisTrackerFiles/Registration-Pointer/Registration-Pointer.rom"]
-                  "C:/Users/Parsiss99/AppData/Local/Parsiss/FilesOfTrackers/PolarisTrackerFiles/Short-Attachment-Reference/Short-Attachment-Reference.rom"]
-
-        }
+    def __init__(self, ndi_config_path):
+        self.SETTINGS = json.load(ndi_config_path)
 
 
     def start(self):
@@ -52,4 +47,3 @@ class NDI_Tracking():
         self.TRACKER.stop_tracking()
         self.TRACKER.close()
 
-ndi_tracking = NDI_Tracking()

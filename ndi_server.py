@@ -1,3 +1,5 @@
+import argparse
+
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 import numpy as np
@@ -15,8 +17,12 @@ from NDI.ndi_coarse_registration import CoarseRegistration
 from NDI.ndi_fine_registration import FineRegistration
 from NDI.ndi_tool_calibration import ToolCalibration
 
-# Import NDI tracking module
-from NDI import NDI_Tracking
+IS_LOCAL = False  # Default to using local files
+
+if IS_LOCAL:
+    from NDI import NDI_Tracking_simulator as NDI_Tracking
+else:
+    from NDI import NDI_Tracking
 
 try:
     with open("../constant_vector.txt", "r") as f:
@@ -25,7 +31,6 @@ try:
         tip_vector = np.array([float(l[0]), float(l[1]), float(l[2]), 1.0])
 except:
     tip_vector = np.array([0.0, 0.0, -161.148433, 1.0])
-    #tip_vector = np.array([3.330330, 1.016458, -159.1557461, 1.0])
 
 
 # Setup logging
@@ -38,14 +43,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="NDI Tracking Server")
 
 # Global configuration
-IS_LOCAL = False  # Default to using local files
+
 ndi_tracker_initialized = False
 
 # Client IP tracking
 client_ip = "127.0.0.1"  # Default to localhost
-
-# Tip position in tool coordinates
-# tip_vector = np.array([3.330330, 1.016458, -159.557461, 1.0])
 
 # Create module instances
 coarse_registration = CoarseRegistration(tip_vector=tip_vector)
@@ -175,7 +177,7 @@ def udp_streaming_thread(port, stop_event, frequency=30):
                 # Use real NDI tracker
                 try:
                     # Get tracking data - NOTE: GetPosition returns just tracking data
-                    tracking = NDI_Tracking.ndi_tracking.GetPosition()
+                    tracking = ndi_tracking.GetPosition()
 
                     if tracking and len(tracking) > 0:
                         # Get probe matrix
@@ -334,7 +336,7 @@ def initialize_ndi(force_restart: bool = False):
     if ndi_tracker_initialized and force_restart:
         try:
             logger.info("Stopping NDI tracker for forced restart...")
-            NDI_Tracking.ndi_tracking.stop()
+            ndi_tracking.stop()
             ndi_tracker_initialized = False
             logger.info("NDI tracker stopped successfully for restart")
         except Exception as e:
@@ -348,12 +350,12 @@ def initialize_ndi(force_restart: bool = False):
     # Initialize the tracker
     try:
         logger.info("Initializing NDI tracker...")
-        NDI_Tracking.ndi_tracking.start()
+        ndi_tracking.start()
         ndi_tracker_initialized = True
 
         # Check if initialization was successful by trying to get a position
         try:
-            tracking = NDI_Tracking.ndi_tracking.GetPosition()
+            tracking = ndi_tracking.GetPosition()
             if tracking is not None:
                 tools_detected = len(tracking)
                 logger.info(f"NDI tracker initialized successfully. Detected {tools_detected} tool(s).")
@@ -393,7 +395,7 @@ def set_data_source(is_local: bool):
     if IS_LOCAL and not is_local and not ndi_tracker_initialized:
         try:
             logger.info("Initializing NDI tracker...")
-            NDI_Tracking.ndi_tracking.start()
+            ndi_tracking.start()
             ndi_tracker_initialized = True
             ndi_status = "initialized"
         except Exception as e:
@@ -404,7 +406,7 @@ def set_data_source(is_local: bool):
     elif not IS_LOCAL and is_local and ndi_tracker_initialized:
         try:
             logger.info("Stopping NDI tracker...")
-            NDI_Tracking.ndi_tracking.stop()
+            ndi_tracking.stop()
             ndi_tracker_initialized = False
             ndi_status = "stopped"
         except Exception as e:
@@ -481,7 +483,7 @@ def set_coarse_point(point_data: CoarsePointInput):
         if not ndi_tracker_initialized:
             try:
                 logger.info("Initializing NDI tracker (auto)...")
-                NDI_Tracking.ndi_tracking.start()
+                ndi_tracking.start()
                 ndi_tracker_initialized = True
             except Exception as e:
                 logger.error(f"Failed to initialize NDI tracker: {str(e)}")
@@ -490,7 +492,7 @@ def set_coarse_point(point_data: CoarsePointInput):
 
         try:
             # Get tracking data - NOTE: GetPosition returns just tracking data
-            tracking = NDI_Tracking.ndi_tracking.GetPosition()
+            tracking = ndi_tracking.GetPosition()
 
             # Check if we got valid tracking data
             if tracking and len(tracking) > 0:
@@ -548,7 +550,7 @@ def coarse_register(visualize: bool = False):
 @app.post("/start_fine_gather")
 def start_fine_gather(frequency: int = 60):
     """Start gathering fine registration points"""
-    return fine_registration.start_fine_gather(frequency, tip_vector, NDI_Tracking.ndi_tracking, IS_LOCAL)
+    return fine_registration.start_fine_gather(frequency, tip_vector, ndi_tracking, IS_LOCAL)
 
 
 @app.post("/end_fine_gather")
@@ -581,7 +583,7 @@ def simulate_fine_gather(num_points: int = 100, replace_existing: bool = False, 
         downsample_factor=downsample_factor,
         tip_vector=current_tip_vector,
         is_local=IS_LOCAL,
-        ndi_tracker=NDI_Tracking.ndi_tracking if ndi_tracker_initialized else None
+        ndi_tracker=ndi_tracking if ndi_tracker_initialized else None
     )
 
     if "status" in result and result["status"] == "success":
@@ -642,7 +644,7 @@ def start_tool_calibration(force_stop_streaming: bool = False, device: int = 0):
 
     # Start tool calibration
 
-    return tool_calibration.start_calibration(ndi_tracker=NDI_Tracking.ndi_tracking,device = device)
+    return tool_calibration.start_calibration(ndi_tracker=ndi_tracking,device = device)
 
 
 @app.post("/end_tool_calibration")
@@ -810,7 +812,7 @@ def get_latest_position():
 
 @app.post("/get_probe_touchpoint")
 def get_probe_touchpoint(probe_idx: int = 0, endoscope_idx : int = 2 ):
-    return tool_calibration.calculate_touch_point(NDI_Tracking.ndi_tracking, tip_vector[0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
+    return tool_calibration.calculate_touch_point(ndi_tracking, tip_vector[0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -832,7 +834,7 @@ def shutdown_event():
     if ndi_tracker_initialized:
         try:
             logger.info("Stopping NDI tracker during shutdown...")
-            NDI_Tracking.ndi_tracking.stop()
+            ndi_tracking.stop()
             ndi_tracker_initialized = False
             logger.info("NDI tracker stopped")
         except Exception as e:
@@ -841,4 +843,11 @@ def shutdown_event():
 
 # Run the application if this script is executed directly
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="Process NDI configuration.")
+    parser.add_argument("--ndi_config_path", type=str, required=True,
+                        help="Path to the NDI configuration file (required)")
+
+    args = parser.parse_args()
+    ndi_tracking = NDI_Tracking.NDI_Tracking(args.ndi_config_path)
     uvicorn.run("ndi_server:app", host="0.0.0.0", port=8000, reload=True)
