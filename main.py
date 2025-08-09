@@ -6,6 +6,7 @@ import json
 
 import uvicorn
 
+from Network.Broadcaster import IPBroadcaster
 from Server.ndi_server import NDI_Server
 
 if __name__ == "__main__":
@@ -19,6 +20,9 @@ if __name__ == "__main__":
 
     with open(args.ndi_config_path, 'r') as file:
         config = json.load(file)
+
+    broadcaster = IPBroadcaster(interval=3)
+    broadcaster.start()
 
     ndi_server = NDI_Server(config, args)
     ndi_server.run()
