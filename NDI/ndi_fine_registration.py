@@ -246,7 +246,7 @@ class FineRegistration:
 
                 # The first matrix is for the probe
                 if tracking and len(tracking) > 0:
-                    probe_matrix = tracking[0]
+                    probe_matrix = tracking[self.config["tool_types"]["probe"]]
 
                     # Calculate the probe tip position
                     tip_position = np.dot(probe_matrix, tip_vector)[:3]
@@ -460,7 +460,7 @@ class FineRegistration:
 
                     if tracking and len(tracking) > 0:
                         # Get probe matrix
-                        probe_matrix = tracking[0]
+                        probe_matrix = tracking[self.config["tool_types"]["probe"]]
 
                         # Calculate probe tip position
                         tip_position = np.dot(probe_matrix, tip_vector)[:3]

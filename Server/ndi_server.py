@@ -262,7 +262,7 @@ class NDI_Server():
                 # Check if we got valid tracking data
                 if tracking and len(tracking) > 0:
                     # The first matrix is for the probe
-                    tool_matrix = tracking[0]
+                    tool_matrix = tracking[self.config["tool_types"]["probe"]]
                     self.logger.info("Got real-time tool matrix from NDI tracker")
                 else:
                     raise HTTPException(status_code=500, detail="No tracking data received from NDI tracker")
@@ -613,8 +613,8 @@ class NDI_Server():
 
                     if tracking and len(tracking) > 0:
                         # Get probe matrix
-                        probe_matrix = tracking[0]
-                        endospcope_matrix= tracking[2]
+                        probe_matrix = tracking[self.config["tool_types"]["probe"]]
+                        endospcope_matrix= tracking[self.config["tool_types"]["endospcope"]]
 
                         # Calculate probe tip position
                         tool_tip = self.tip_vector

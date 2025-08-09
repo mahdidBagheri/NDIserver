@@ -163,6 +163,12 @@ class CoarseRegistration:
         Returns:
             Information about the set point
         """
+
+        if tool_matrix == None:
+            return {
+                "status": "error",
+                "message": "could not detect probe!"
+            }
         # Convert to numpy array
         unity_point_np = np.array(unity_point)
 
@@ -180,7 +186,8 @@ class CoarseRegistration:
             "ndi_point": ndi_point.tolist(),
             "unity_point": unity_point_np.tolist(),
             "point_number": point_number,
-            "tip_vector_used": self.tip_vector
+            "tip_vector_used": self.tip_vector,
+            "message": "success"
         }
 
     def get_coarse_points(self) -> Dict[str, Any]:

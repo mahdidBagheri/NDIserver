@@ -91,25 +91,3 @@ class PathGenerator:
                                 [0.0, 0.0, 0.0, 1.0]])
 
         return [transform1, transform2, transform3]
-
-
-# Example usage
-if __name__ == "__main__":
-    path_gen = PathGenerator()
-    matrices = path_gen.get_transformation_matrices()
-
-    print("First transformation matrix (moving in circular path):")
-    print(matrices[0])
-    print("\nSecond transformation matrix (steady with small noise):")
-    print(matrices[1])
-    print("\nThird transformation matrix (moving in figure-8 path):")
-    print(matrices[2])
-
-    # Get matrices again after a delay to see movement
-    import time
-
-    time.sleep(1)
-    matrices = path_gen.get_transformation_matrices()
-    print("\nAfter 1 second:")
-    print("First transformation matrix:")
-    print(matrices[0])
