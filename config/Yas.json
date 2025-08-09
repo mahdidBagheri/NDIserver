@@ -1,5 +1,5 @@
 {
-  "tool_types": ["probe", "reference", "endoscope"],
+  "tool_types": {"probe": 0, "reference": 1, "endoscope": 2},
   "device_params": {
     "tracker type": "polaris",
     "romfiles": [

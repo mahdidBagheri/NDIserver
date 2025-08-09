@@ -44,10 +44,10 @@ class NDI_Server():
 
         if args.is_local:
             from NDI import NDI_Tracking_simulator as NDI_Tracking
-            self.ndi_tracking = NDI_Tracking.NDI_Tracking_Simulator(config)
+            self.ndi_tracking = NDI_Tracking.NDI_Tracking_Simulator(config, args)
         else:
             from NDI import NDI_Tracking
-            self.ndi_tracking = NDI_Tracking.NDI_Tracking(config)
+            self.ndi_tracking = NDI_Tracking.NDI_Tracking(config, args)
 
 
 
@@ -103,7 +103,7 @@ class NDI_Server():
             return response
 
         @self.app.post("/set_client_ip")
-        def set_client_ip(self, ip: str):
+        def set_client_ip(ip: str):
             """Manually set the client IP address for UDP streaming"""
 
             # Validate IP format
@@ -539,6 +539,19 @@ class NDI_Server():
         def get_probe_touchpoint(probe_idx: int = 0, endoscope_idx : int = 2 ):
             return self.tool_calibration.calculate_touch_point(self.ndi_tracking, self.config["probe_tip_vector"][0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
 
+        @self.app.post('/check_tools')
+        def check_tools():
+            tools_transformation = self.ndi_tracking.GetPosition()
+            tool_visibility = {}
+            for tool in self.config["tool_types"].keys():
+                tool_transform = tools_transformation[self.config["tool_types"][tool]]
+                print(f"tool: {tool_transform}")
+                if tool_transform is None:
+                    tool_visibility.update({tool:False})
+                else:
+                    tool_visibility.update({tool:True})
+            return tool_visibility
+
         @self.app.on_event("shutdown")
         def shutdown_event():
             """Clean up resources when the application is shutting down"""
@@ -563,6 +576,11 @@ class NDI_Server():
                     self.logger.info("NDI tracker stopped")
                 except Exception as e:
                     self.logger.error(f"Error stopping NDI tracker: {str(e)}")
+
+
+
+
+
 
     def udp_streaming_thread(self, port, stop_event, frequency=30):
         """Thread function to stream NDI transformations over UDP"""
@@ -678,6 +696,8 @@ class NDI_Server():
             self.logger.exception(f"Error in UDP streaming thread: {str(e)}")
         finally:
             self.logger.info("UDP streaming stopped")
+
+
 
     def run(self):
         uvicorn.run(self.app, host="0.0.0.0", port=8000)
