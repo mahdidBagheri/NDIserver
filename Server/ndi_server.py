@@ -253,19 +253,19 @@ class NDI_Server():
             self.logger.info("Getting point from real NDI tracker")
 
             if not self.ndi_tracker_initialized:
-                raise HTTPException(status_code=500, detail=f"NDI tracker not initialized.")
+                raise HTTPException(status_code=404, detail=f"NDI tracker not initialized.")
 
             try:
                 # Get tracking data - NOTE: GetPosition returns just tracking data
                 tracking = self.ndi_tracking.GetPosition()
 
                 # Check if we got valid tracking data
-                if tracking and len(tracking) > 0:
+                if tracking[self.config["tool_types"]["probe"]]:
                     # The first matrix is for the probe
                     tool_matrix = tracking[self.config["tool_types"]["probe"]]
                     self.logger.info("Got real-time tool matrix from NDI tracker")
                 else:
-                    raise HTTPException(status_code=500, detail="No tracking data received from NDI tracker")
+                    raise HTTPException(status_code=404, detail="No tracking data received from NDI tracker")
 
             except Exception as e:
                 self.logger.exception("Error getting data from NDI tracker")
