@@ -258,18 +258,18 @@ class NDI_Server():
             try:
                 # Get tracking data - NOTE: GetPosition returns just tracking data
                 tracking = self.ndi_tracking.GetPosition()
-
-                # Check if we got valid tracking data
-                if tracking[self.config["tool_types"]["probe"]]:
-                    # The first matrix is for the probe
-                    tool_matrix = tracking[self.config["tool_types"]["probe"]]
-                    self.logger.info("Got real-time tool matrix from NDI tracker")
-                else:
-                    raise HTTPException(status_code=404, detail="No tracking data received from NDI tracker")
-
             except Exception as e:
                 self.logger.exception("Error getting data from NDI tracker")
-                raise HTTPException(status_code=500, detail=f"Error getting data from NDI tracker: {str(e)}")
+                raise HTTPException(status_code=404, detail=f"Error getting data from NDI tracker: {e}")
+
+            # Check if we got valid tracking data
+            if tracking[self.config["tool_types"]["probe"]] is not None:
+                # The first matrix is for the probe
+                tool_matrix = tracking[self.config["tool_types"]["probe"]]
+                self.logger.info("Got real-time tool matrix from NDI tracker")
+            else:
+                raise HTTPException(status_code=404, detail="probe not detected")
+
 
             # Set the coarse point using the tool matrix and unity point
             result = self.coarse_registration.set_coarse_point(unity_point, point_number, tool_matrix)
@@ -552,6 +552,13 @@ class NDI_Server():
                     tool_visibility.update({tool:True})
             return tool_visibility
 
+        @self.app.post("/load_last_transform")
+        def load_last_transform():
+            with open("saved_state.json") as f:
+                last_state = json.load(f)
+            self.fine_registration.combined_transformation = np.asarray(last_state["combined_transform"])
+
+
         @self.app.on_event("shutdown")
         def shutdown_event():
             """Clean up resources when the application is shutting down"""
@@ -669,7 +676,7 @@ class NDI_Server():
                     }
 
                 # Store the latest data for the API endpoint
-                latest_streaming_data = data
+                self.latest_streaming_data = data
 
                 # Send data packet via UDP to the client IP
                 packet = json.dumps(data).encode('utf-8')

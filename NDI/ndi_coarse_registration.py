@@ -164,7 +164,7 @@ class CoarseRegistration:
             Information about the set point
         """
 
-        if tool_matrix == None:
+        if tool_matrix is None:
             return {
                 "status": "error",
                 "message": "could not detect probe!"

@@ -1,4 +1,5 @@
 import copy
+import json
 
 import numpy as np
 import os
@@ -9,7 +10,10 @@ from typing import List, Dict, Any, Optional, Tuple
 import open3d as o3d
 from threading import Event
 
+from Utils.Utils import save_state
+
 logger = logging.getLogger(__name__)
+
 
 
 class FineRegistration:
@@ -32,6 +36,8 @@ class FineRegistration:
 
         # Load matrices from fine.txt
         self.parse_fine_file()
+
+        self.combined_transformation = None
 
     def parse_fine_file(self) -> List[np.ndarray]:
         """
@@ -359,7 +365,9 @@ class FineRegistration:
             # self.fine_transformation_matrix = reg_p2p.transformation
 
             # Calculate the combined transformation (fine × coarse)
-            combined_transformation = self.fine_transformation_matrix @ initial_transform
+            self.combined_transformation = self.fine_transformation_matrix @ initial_transform
+
+            save_state("saved_state.json", {"combined_transform":self.combined_transformation})
 
             logger.info(
                 f"Fine registration (ICP) completed with fitness: {reg_p2p.fitness}, RMSE: {reg_p2p.inlier_rmse}")
@@ -373,7 +381,7 @@ class FineRegistration:
             # Only do visualization if requested
             if visualize:
                 self._visualize_registration(ct_points, np.array(self.fine_points),
-                                             combined_transformation, id, downsample_factor)
+                                             self.combined_transformation, id, downsample_factor)
 
                 vis_info = {
                     "status": "launched",
@@ -385,7 +393,7 @@ class FineRegistration:
                 "status": "success",
                 "coarse_transformation": initial_transform.tolist(),
                 "fine_transformation": self.fine_transformation_matrix.tolist(),
-                "combined_transformation": combined_transformation.tolist(),
+                "combined_transformation": self.combined_transformation.tolist(),
                 "fitness": reg_p2p.fitness,
                 "inlier_rmse": reg_p2p.inlier_rmse,
                 "num_points_used": len(self.fine_points),
@@ -573,3 +581,4 @@ class FineRegistration:
             List of fine points as 3D vectors
         """
         return self.fine_points
+

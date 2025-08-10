@@ -81,12 +81,8 @@ class PathGenerator:
         # Create transformation matrices
         transform1 = self._create_transform_matrix(translation1, rotation1)
 
-        transform1 = np.array([[np.nan, np.nan,np.nan,np.nan],
-                               [np.nan, np.nan,np.nan,np.nan],
-                               [np.nan, np.nan,np.nan,np.nan],
-                                [0.0, 0.0, 0.0, 1.0]])
-
         transform2 = self._create_transform_matrix(translation2, rotation2)
+
         transform3 = self._create_transform_matrix(translation3, rotation3)
 
 
