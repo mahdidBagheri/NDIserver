@@ -28,30 +28,6 @@ class MplCanvas(FigureCanvasQTAgg):
         super(MplCanvas, self).__init__(fig)
 
 
-class FinePointsThread(QThread):
-    update_signal = pyqtSignal(dict)
-
-    def __init__(self):
-        super().__init__()
-        self.running = True
-
-    def run(self):
-        while self.running:
-            try:
-                response = requests.get(f"{SERVER_URL}/get_fine_points_status")
-                if response.status_code == 200:
-                    data = response.json()
-                    self.update_signal.emit(data)
-                time.sleep(0.5)  # Update every 0.5 seconds
-            except Exception as e:
-                print(f"Error fetching fine points: {e}")
-                time.sleep(2)  # Wait longer on error
-
-    def stop(self):
-        self.running = False
-        self.wait()
-
-
 class ServerStatusThread(QThread):
     update_signal = pyqtSignal(dict)
 
@@ -76,9 +52,36 @@ class ServerStatusThread(QThread):
         self.wait()
 
 
-class NDITrackingUI(QMainWindow):
+class CoarsePointsThread(QThread):
+    update_signal = pyqtSignal()
+
     def __init__(self):
         super().__init__()
+        self.running = True
+
+    def run(self):
+        while self.running:
+            try:
+                # Signal the main thread to refresh coarse points
+                self.update_signal.emit()
+                time.sleep(0.5)  # Update every 0.5 seconds
+            except Exception as e:
+                print(f"Error in coarse points thread: {e}")
+                time.sleep(2)  # Wait longer on error
+
+    def stop(self):
+        self.running = False
+        self.wait()
+
+
+class NDITrackingUI(QMainWindow):
+    def __init__(self, ndi_server=None, config=None, args=None):
+        super().__init__()
+
+        # Store reference to the NDI server and config
+        self.ndi_server = ndi_server
+        self.config = config or {}
+        self.args = args or {}
 
         # Set window properties
         self.setWindowTitle("NDI Tracking Server Interface")
@@ -88,6 +91,10 @@ class NDITrackingUI(QMainWindow):
         self.coarse_unity_points = []
         self.coarse_ndi_points = []
         self.last_coarse_points_count = 0
+
+        # CT Point Cloud data - initialize first
+        self.ct_point_cloud = None
+        self.show_ct_point_cloud = False
 
         # Create tab widget
         self.tabs = QTabWidget()
@@ -107,6 +114,9 @@ class NDITrackingUI(QMainWindow):
         self.tabs.addTab(self.streaming_tab, "Streaming")
         self.tabs.addTab(self.tool_calibration_tab, "Tool Calibration")
 
+        # Connect tab changed signal to update flags
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+
         # Setup each tab
         self.setup_init_tab()
         self.setup_coarse_tab()
@@ -114,24 +124,87 @@ class NDITrackingUI(QMainWindow):
         self.setup_streaming_tab()
         self.setup_tool_calibration_tab()
 
+        # Load CT point cloud AFTER UI is set up
+        self.load_ct_point_cloud()
+
         # Start background threads
         self.server_status_thread = ServerStatusThread()
         self.server_status_thread.update_signal.connect(self.update_server_status)
         self.server_status_thread.start()
 
-        self.fine_points_thread = FinePointsThread()
-        self.fine_points_thread.update_signal.connect(self.update_fine_points)
-        self.fine_points_thread.start()
+        # Start coarse points thread for more frequent updates
+        self.coarse_points_thread = CoarsePointsThread()
+        self.coarse_points_thread.update_signal.connect(self.refresh_coarse_points)
+        self.coarse_points_thread.start()
 
-        # Setup periodic refresh timers
-        self.coarse_points_timer = QTimer()
-        self.coarse_points_timer.timeout.connect(self.refresh_coarse_points)
-        self.coarse_points_timer.start(1000)  # Refresh every second
+        # Use timer for fine points visualization to avoid blocking the UI
+        self.fine_points_timer = QTimer()
+        self.fine_points_timer.timeout.connect(self.update_fine_points)
+        self.fine_points_timer.start(100)  # Update at 10 Hz
+
+        # Variable to keep track of the last number of fine points for efficient updates
+        self.last_fine_points_count = 0
+        # Store a downsampled copy of fine points for visualization
+        self.fine_points_to_plot = []
+        # Flag to indicate if full replot is needed (e.g. on tab switch)
+        self.fine_plot_needs_full_update = True
+
+    def load_ct_point_cloud(self):
+        """Load CT point cloud data from the specified file in config"""
+        try:
+            if self.config and "CT_PC_address" in self.config:
+                file_path = self.config["CT_PC_address"]
+                print(f"Loading CT point cloud from: {file_path}")  # Debug print
+                self.log_message(f"Loading CT point cloud from: {file_path}")
+
+                # Check if file exists
+                import os
+                if not os.path.exists(file_path):
+                    print(f"CT point cloud file not found: {file_path}")
+                    self.log_message(f"CT point cloud file not found: {file_path}")
+                    return
+
+                # Load point cloud data
+                self.ct_point_cloud = np.load(file_path)
+                print(f"CT point cloud shape: {self.ct_point_cloud.shape}")  # Debug print
+
+                # Ensure it's 3D points
+                if len(self.ct_point_cloud.shape) != 2 or self.ct_point_cloud.shape[1] != 3:
+                    print(f"Invalid CT point cloud shape: {self.ct_point_cloud.shape}. Expected (N, 3)")
+                    self.log_message(f"Invalid CT point cloud shape: {self.ct_point_cloud.shape}. Expected (N, 3)")
+                    self.ct_point_cloud = None
+                    return
+
+                # If the point cloud is too large, downsample it for better performance
+                if len(self.ct_point_cloud) > 10000:
+                    # Randomly sample 10000 points
+                    indices = np.random.choice(len(self.ct_point_cloud), size=10000, replace=False)
+                    self.ct_point_cloud = self.ct_point_cloud[indices]
+                    print(f"Downsampled CT point cloud to 10000 points")
+
+                print(f"CT point cloud loaded successfully: {len(self.ct_point_cloud)} points")
+                self.log_message(f"CT point cloud loaded: {len(self.ct_point_cloud)} points")
+
+                # Enable the toggle buttons now that we have data
+                if hasattr(self, 'toggle_ct_pc_btn'):
+                    self.toggle_ct_pc_btn.setEnabled(True)
+                if hasattr(self, 'fine_toggle_ct_pc_btn'):
+                    self.fine_toggle_ct_pc_btn.setEnabled(True)
+
+            else:
+                print("No CT_PC_address found in config")
+                self.log_message("No CT_PC_address found in config")
+
+        except Exception as e:
+            self.ct_point_cloud = None
+            print(f"Error loading CT point cloud: {e}")
+            self.log_message(f"Error loading CT point cloud: {e}")
 
     def closeEvent(self, event):
         # Stop background threads when window is closed
         self.server_status_thread.stop()
-        self.fine_points_thread.stop()
+        self.coarse_points_thread.stop()
+        self.fine_points_timer.stop()
         event.accept()
 
     def setup_init_tab(self):
@@ -238,10 +311,16 @@ class NDITrackingUI(QMainWindow):
         self.refresh_btn = QPushButton("Refresh Points Data")
         self.refresh_btn.clicked.connect(self.refresh_coarse_points_manual)
 
+        # CT Point Cloud toggle
+        self.toggle_ct_pc_btn = QPushButton("Show CT Point Cloud")
+        self.toggle_ct_pc_btn.clicked.connect(self.toggle_ct_point_cloud)
+        self.toggle_ct_pc_btn.setEnabled(False)  # Will be enabled if CT data is loaded
+
         reg_layout.addWidget(self.register_btn)
         reg_layout.addWidget(self.visualize_checkbox)
         reg_layout.addWidget(self.reset_points_btn)
         reg_layout.addWidget(self.refresh_btn)
+        reg_layout.addWidget(self.toggle_ct_pc_btn)
         reg_group.setLayout(reg_layout)
 
         # Results group
@@ -339,6 +418,13 @@ class NDITrackingUI(QMainWindow):
         self.fine_register_btn = QPushButton("Perform Fine Registration")
         self.fine_register_btn.clicked.connect(self.perform_fine_registration)
 
+        # CT Point Cloud toggle - IMPORTANT: This is the toggle button for fine tab
+        self.fine_toggle_ct_pc_btn = QPushButton("Show CT Point Cloud")
+        self.fine_toggle_ct_pc_btn.clicked.connect(self.toggle_ct_point_cloud)
+        self.fine_toggle_ct_pc_btn.setEnabled(False)  # Will be enabled if CT data is loaded
+        self.fine_toggle_ct_pc_btn.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }")
+
         # Status display
         self.fine_status_label = QLabel("Not gathering")
         self.fine_points_count_label = QLabel("0 points")
@@ -349,6 +435,7 @@ class NDITrackingUI(QMainWindow):
         control_layout.addLayout(freq_layout)
         control_layout.addLayout(params_layout)
         control_layout.addWidget(self.fine_register_btn)
+        control_layout.addWidget(self.fine_toggle_ct_pc_btn)  # Make sure this is added
         control_layout.addWidget(self.fine_status_label)
         control_layout.addWidget(self.fine_points_count_label)
 
@@ -551,10 +638,125 @@ class NDITrackingUI(QMainWindow):
 
         self.tool_calibration_tab.setLayout(layout)
 
+    def toggle_ct_point_cloud(self):
+        """Toggle the visibility of the CT point cloud"""
+        if self.ct_point_cloud is None:
+            self.log_message("CT point cloud data is not available")
+            return
+
+        self.show_ct_point_cloud = not self.show_ct_point_cloud
+
+        # Update button text and style based on current state
+        if self.show_ct_point_cloud:
+            button_text = "Hide CT Point Cloud"
+            button_style = "QPushButton { background-color: #f44336; color: white; font-weight: bold; }"
+        else:
+            button_text = "Show CT Point Cloud"
+            button_style = "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }"
+
+        self.toggle_ct_pc_btn.setText(button_text)
+        self.toggle_ct_pc_btn.setStyleSheet(button_style)
+        self.fine_toggle_ct_pc_btn.setText(button_text)
+        self.fine_toggle_ct_pc_btn.setStyleSheet(button_style)
+
+        # Force immediate update of visualizations
+        current_tab = self.tabs.currentWidget()
+        if current_tab == self.coarse_tab:
+            self.update_coarse_visualization()
+        elif current_tab == self.fine_tab:
+            # Force immediate update of fine visualization
+            self.fine_plot_needs_full_update = True
+            self.update_fine_visualization_immediate()
+
+        self.log_message(f"CT point cloud {'shown' if self.show_ct_point_cloud else 'hidden'}")
+
+    def update_fine_visualization_immediate(self):
+        """Immediately update fine visualization (called when CT toggle is pressed)"""
+        try:
+            print(f"Updating fine visualization immediately. Show CT: {self.show_ct_point_cloud}")
+
+            # Clear existing plot
+            self.fine_canvas.axes.clear()
+            self.fine_canvas.axes.set_xlabel('X')
+            self.fine_canvas.axes.set_ylabel('Y')
+            self.fine_canvas.axes.set_zlabel('Z')
+
+            # Get current fine points count
+            current_count = 0
+            if self.ndi_server and hasattr(self.ndi_server, 'fine_registration'):
+                fine_points = self.ndi_server.fine_registration.fine_points
+                current_count = len(fine_points)
+
+                # Update points to plot if we have fine points
+                if current_count > 0:
+                    if current_count > 2000:
+                        indices = np.linspace(0, current_count - 1, 2000, dtype=int)
+                        self.fine_points_to_plot = [fine_points[i] for i in indices]
+                    else:
+                        self.fine_points_to_plot = fine_points.copy()
+
+            self.fine_canvas.axes.set_title(f'Fine Registration Points ({current_count} total)')
+
+            # Plot CT point cloud FIRST if enabled (so it appears behind fine points)
+            if self.show_ct_point_cloud and self.ct_point_cloud is not None:
+                print(f"Plotting CT point cloud with {len(self.ct_point_cloud)} points")
+                self.fine_canvas.axes.scatter(
+                    self.ct_point_cloud[:, 0],
+                    self.ct_point_cloud[:, 1],
+                    self.ct_point_cloud[:, 2],
+                    c='red', marker='.', s=1, alpha=0.6, label='CT Point Cloud'
+                )
+
+            # Plot fine points if we have them
+            if self.fine_points_to_plot:
+                points_array = np.array(self.fine_points_to_plot)
+                print(f"Plotting {len(points_array)} fine points")
+                self.fine_canvas.axes.scatter(
+                    points_array[:, 0],
+                    points_array[:, 1],
+                    points_array[:, 2],
+                    c='blue', marker='.', s=3, alpha=0.8, label='Fine Points'
+                )
+
+            # Add legend if we have any points
+            if self.show_ct_point_cloud or len(self.fine_points_to_plot) > 0:
+                self.fine_canvas.axes.legend()
+
+            # Auto-adjust axis limits to fit all points
+            all_points = []
+
+            if self.fine_points_to_plot:
+                all_points.append(np.array(self.fine_points_to_plot))
+
+            if self.show_ct_point_cloud and self.ct_point_cloud is not None:
+                all_points.append(self.ct_point_cloud)
+
+            if all_points:
+                all_points = np.vstack(all_points)
+                max_range = np.max(np.max(all_points, axis=0) - np.min(all_points, axis=0))
+                mid_x = np.mean([np.min(all_points[:, 0]), np.max(all_points[:, 0])])
+                mid_y = np.mean([np.min(all_points[:, 1]), np.max(all_points[:, 1])])
+                mid_z = np.mean([np.min(all_points[:, 2]), np.max(all_points[:, 2])])
+
+                self.fine_canvas.axes.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
+                self.fine_canvas.axes.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
+                self.fine_canvas.axes.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
+
+            # Refresh canvas
+            self.fine_canvas.draw()
+            print("Fine visualization update completed")
+
+        except Exception as e:
+            print(f"Error updating fine visualization immediately: {e}")
+            self.log_message(f"Error updating fine visualization: {e}")
+
     def log_message(self, message):
         """Add message to log output with timestamp"""
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        self.log_output.append(f"[{timestamp}] {message}")
+        if hasattr(self, 'log_output'):
+            self.log_output.append(f"[{timestamp}] {message}")
+        else:
+            print(f"[{timestamp}] {message}")  # Fallback if log_output not yet initialized
 
     def update_server_status(self, status_data):
         """Update UI with server status information"""
@@ -571,12 +773,11 @@ class NDITrackingUI(QMainWindow):
                 streaming_active = status_data.get("streaming_active", False)
                 self.streaming_status_label.setText(f"{'Streaming' if streaming_active else 'Not streaming'}")
 
-            # Check if coarse points count changed
+            # If coarse points count changed, log it (actual refresh is handled by the coarse_points_thread)
             new_coarse_count = status_data.get("coarse_points_loaded", 0)
             if new_coarse_count != self.last_coarse_points_count:
                 self.last_coarse_points_count = new_coarse_count
                 self.log_message(f"Coarse points count changed to {new_coarse_count}")
-                self.refresh_coarse_points()
 
         except Exception as e:
             self.log_message(f"Error updating status: {e}")
@@ -642,10 +843,7 @@ class NDITrackingUI(QMainWindow):
             if self.tabs.currentWidget() != self.coarse_tab:
                 return
 
-            # Make request to get all coarse points - since there's no direct endpoint for this
-            # we'll use a simulated approach by checking the server root endpoint for count
-            # and then inferring that there are entries from 0 to count-1
-
+            # Make request to get coarse points status
             response = requests.get(f"{SERVER_URL}/")
             if response.status_code != 200:
                 return
@@ -653,50 +851,10 @@ class NDITrackingUI(QMainWindow):
             data = response.json()
             coarse_points_count = data.get("coarse_points_loaded", 0)
 
+            # Update UI labels
             if coarse_points_count > 0:
                 self.coarse_count_label.setText(f"{coarse_points_count} points available")
                 self.coarse_info_label.setText("Points have been set by another client")
-
-                # Clear existing data in table
-                self.points_table.setRowCount(0)
-
-                # We don't have a direct API to get all points, so we'll simulate by inferring
-                # that points are numbered from 0 to count-1
-                unity_points = []
-                ndi_points = []
-
-                # In a real implementation, we would fetch actual points from the server
-                # Since there's no direct endpoint to get all coarse points, we'll use mock data
-                # that's consistent across refreshes
-
-                np.random.seed(42)  # Use fixed seed for reproducibility
-
-                for i in range(coarse_points_count):
-                    # Create simulated data for visualization purposes
-                    unity_point = np.random.rand(3) * 100  # Random point in [0,100] range
-                    ndi_point = unity_point + np.random.randn(3) * 5  # Add some noise
-
-                    unity_points.append(unity_point)
-                    ndi_points.append(ndi_point)
-
-                    # Add to table
-                    row = self.points_table.rowCount()
-                    self.points_table.insertRow(row)
-                    self.points_table.setItem(row, 0, QTableWidgetItem(str(i)))
-
-                    for j, val in enumerate(unity_point):
-                        self.points_table.setItem(row, j + 1, QTableWidgetItem(f"{val:.3f}"))
-
-                    for j, val in enumerate(ndi_point):
-                        self.points_table.setItem(row, j + 4, QTableWidgetItem(f"{val:.3f}"))
-
-                # Store points for visualization
-                self.coarse_unity_points = np.array(unity_points)
-                self.coarse_ndi_points = np.array(ndi_points)
-
-                # Update visualization
-                self.update_coarse_visualization()
-
             else:
                 self.coarse_count_label.setText("0 points available")
                 self.coarse_info_label.setText("Waiting for points from another client...")
@@ -704,6 +862,87 @@ class NDITrackingUI(QMainWindow):
                 self.coarse_unity_points = []
                 self.coarse_ndi_points = []
                 self.update_coarse_visualization()
+                return
+
+            # Try to get all coarse points at once first (more efficient)
+            try:
+                points_response = requests.get(f"{SERVER_URL}/get_coarse_points")
+                if points_response.status_code == 200:
+                    points_data = points_response.json()
+                    unity_points = points_data.get("unity_points", [])
+                    ndi_points = points_data.get("ndi_points", [])
+
+                    if unity_points and ndi_points and len(unity_points) == len(ndi_points):
+                        # Clear table and repopulate
+                        self.points_table.setRowCount(0)
+                        for i, (unity_point, ndi_point) in enumerate(zip(unity_points, ndi_points)):
+                            # Add to table
+                            row = self.points_table.rowCount()
+                            self.points_table.insertRow(row)
+                            self.points_table.setItem(row, 0, QTableWidgetItem(str(i)))
+
+                            for j, val in enumerate(unity_point):
+                                self.points_table.setItem(row, j + 1, QTableWidgetItem(f"{val:.3f}"))
+
+                            for j, val in enumerate(ndi_point):
+                                self.points_table.setItem(row, j + 4, QTableWidgetItem(f"{val:.3f}"))
+
+                        # Store points for visualization
+                        self.coarse_unity_points = np.array(unity_points)
+                        self.coarse_ndi_points = np.array(ndi_points)
+
+                        # Update visualization
+                        self.update_coarse_visualization()
+                        return
+            except Exception as e:
+                self.log_message(f"Error getting all points at once: {e}")
+
+            # If batch endpoint failed, try getting points one by one
+            try:
+                unity_points = []
+                ndi_points = []
+
+                # Clear table
+                self.points_table.setRowCount(0)
+
+                for i in range(coarse_points_count):
+                    # Try to get individual point pairs
+                    point_response = requests.get(f"{SERVER_URL}/get_coarse_point/{i}")
+                    if point_response.status_code == 200:
+                        point_data = point_response.json()
+                        unity_point = point_data.get("unity_point")
+                        ndi_point = point_data.get("ndi_point")
+
+                        if unity_point and ndi_point:
+                            unity_points.append(unity_point)
+                            ndi_points.append(ndi_point)
+
+                            # Add to table
+                            row = self.points_table.rowCount()
+                            self.points_table.insertRow(row)
+                            self.points_table.setItem(row, 0, QTableWidgetItem(str(i)))
+
+                            for j, val in enumerate(unity_point):
+                                self.points_table.setItem(row, j + 1, QTableWidgetItem(f"{val:.3f}"))
+
+                            for j, val in enumerate(ndi_point):
+                                self.points_table.setItem(row, j + 4, QTableWidgetItem(f"{val:.3f}"))
+
+                # Store points for visualization
+                if unity_points and ndi_points:
+                    self.coarse_unity_points = np.array(unity_points)
+                    self.coarse_ndi_points = np.array(ndi_points)
+
+                # Update visualization
+                self.update_coarse_visualization()
+            except Exception as e:
+                self.log_message(f"Error getting points individually: {e}")
+
+            # If we still couldn't get points data, show a message
+            if not len(self.coarse_unity_points) or not len(self.coarse_ndi_points):
+                self.points_table.setRowCount(1)
+                self.points_table.setItem(0, 0, QTableWidgetItem(""))
+                self.points_table.setItem(0, 1, QTableWidgetItem("Points exist but details are not accessible"))
 
         except Exception as e:
             self.log_message(f"Error refreshing coarse points: {e}")
@@ -723,33 +962,197 @@ class NDITrackingUI(QMainWindow):
             self.coarse_canvas.axes.set_zlabel('Z')
             self.coarse_canvas.axes.set_title('Coarse Registration Points')
 
-            # Plot unity points
+            # Plot CT point cloud if enabled
+            if self.show_ct_point_cloud and self.ct_point_cloud is not None:
+                print(f"Plotting CT point cloud with {len(self.ct_point_cloud)} points")  # Debug
+                self.coarse_canvas.axes.scatter(
+                    self.ct_point_cloud[:, 0],
+                    self.ct_point_cloud[:, 1],
+                    self.ct_point_cloud[:, 2],
+                    c='r', marker='.', s=1, alpha=0.5, label='CT Point Cloud'
+                )
+
+            # Plot unity points if we have them
             if len(self.coarse_unity_points) > 0:
                 self.coarse_canvas.axes.scatter(
                     self.coarse_unity_points[:, 0],
                     self.coarse_unity_points[:, 1],
                     self.coarse_unity_points[:, 2],
-                    c='g', marker='o', label='Unity'
+                    c='g', marker='o', label='Unity', s=50  # Increase size for better visibility
                 )
 
-            # Plot NDI points
+            # Plot NDI points if we have them
             if len(self.coarse_ndi_points) > 0:
                 self.coarse_canvas.axes.scatter(
                     self.coarse_ndi_points[:, 0],
                     self.coarse_ndi_points[:, 1],
                     self.coarse_ndi_points[:, 2],
-                    c='r', marker='^', label='NDI'
+                    c='b', marker='^', label='NDI', s=50  # Increase size for better visibility
                 )
 
+            # Draw lines connecting corresponding points if we have both sets
+            if len(self.coarse_unity_points) > 0 and len(self.coarse_ndi_points) > 0 and len(
+                    self.coarse_unity_points) == len(self.coarse_ndi_points):
+                for i in range(len(self.coarse_unity_points)):
+                    self.coarse_canvas.axes.plot(
+                        [self.coarse_unity_points[i, 0], self.coarse_ndi_points[i, 0]],
+                        [self.coarse_unity_points[i, 1], self.coarse_ndi_points[i, 1]],
+                        [self.coarse_unity_points[i, 2], self.coarse_ndi_points[i, 2]],
+                        'k--', alpha=0.3  # Black dashed line with transparency
+                    )
+
             # Add legend if we have points
-            if len(self.coarse_unity_points) > 0 or len(self.coarse_ndi_points) > 0:
+            if self.show_ct_point_cloud or len(self.coarse_unity_points) > 0 or len(self.coarse_ndi_points) > 0:
                 self.coarse_canvas.axes.legend()
+
+            # Auto-adjust axis limits to fit all points
+            all_points = []
+
+            if len(self.coarse_unity_points) > 0:
+                all_points.append(self.coarse_unity_points)
+
+            if len(self.coarse_ndi_points) > 0:
+                all_points.append(self.coarse_ndi_points)
+
+            if self.show_ct_point_cloud and self.ct_point_cloud is not None:
+                all_points.append(self.ct_point_cloud)
+
+            if all_points:
+                all_points = np.vstack(all_points)
+                max_range = np.max(np.max(all_points, axis=0) - np.min(all_points, axis=0))
+                mid_x = np.mean([np.min(all_points[:, 0]), np.max(all_points[:, 0])])
+                mid_y = np.mean([np.min(all_points[:, 1]), np.max(all_points[:, 1])])
+                mid_z = np.mean([np.min(all_points[:, 2]), np.max(all_points[:, 2])])
+
+                self.coarse_canvas.axes.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
+                self.coarse_canvas.axes.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
+                self.coarse_canvas.axes.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
 
             # Refresh canvas
             self.coarse_canvas.draw()
 
         except Exception as e:
             self.log_message(f"Error updating coarse visualization: {e}")
+
+    def on_tab_changed(self, index):
+        """Handle tab change events"""
+        # When switching to fine tab, force a full update of the plot
+        if self.tabs.widget(index) == self.fine_tab:
+            self.fine_plot_needs_full_update = True
+            # Force immediate update if CT point cloud should be shown
+            if self.show_ct_point_cloud:
+                self.update_fine_visualization_immediate()
+
+    def update_fine_points(self):
+        """Update the fine points visualization using direct access to ndi_server"""
+        try:
+            # Only update if we're on the fine tab to save resources
+            if self.tabs.currentWidget() != self.fine_tab or not self.ndi_server:
+                return
+
+            # Get fine points directly from the server instance
+            fine_points = self.ndi_server.fine_registration.fine_points
+            current_count = len(fine_points)
+
+            # Update the points count label
+            self.fine_points_count_label.setText(f"{current_count} points collected")
+
+            # Check if we need to update the visualization
+            if current_count == 0 and not self.show_ct_point_cloud:
+                if self.last_fine_points_count > 0 or self.fine_plot_needs_full_update:
+                    # Clear plot
+                    self.fine_canvas.axes.clear()
+                    self.fine_canvas.axes.set_xlabel('X')
+                    self.fine_canvas.axes.set_ylabel('Y')
+                    self.fine_canvas.axes.set_zlabel('Z')
+                    self.fine_canvas.axes.set_title('Fine Registration Points')
+                    self.fine_canvas.draw()
+                    self.last_fine_points_count = 0
+                    self.fine_points_to_plot = []
+                    self.fine_plot_needs_full_update = False
+                return
+
+            # Only do expensive resampling and plotting if:
+            # 1. The number of points has changed significantly (added 50+ new points)
+            # 2. We haven't plotted anything yet
+            # 3. We've explicitly requested a full update (e.g. after tab switch)
+            # 4. CT point cloud visibility has changed
+            if (abs(current_count - self.last_fine_points_count) > 50 or
+                    self.last_fine_points_count == 0 or
+                    self.fine_plot_needs_full_update):
+
+                # If there are too many points, sample them for performance
+                if current_count > 2000:
+                    indices = np.linspace(0, current_count - 1, 2000, dtype=int)
+                    self.fine_points_to_plot = [fine_points[i] for i in indices]
+                else:
+                    self.fine_points_to_plot = fine_points.copy() if fine_points else []
+
+                # Clear existing plot
+                self.fine_canvas.axes.clear()
+                self.fine_canvas.axes.set_xlabel('X')
+                self.fine_canvas.axes.set_ylabel('Y')
+                self.fine_canvas.axes.set_zlabel('Z')
+                self.fine_canvas.axes.set_title(f'Fine Registration Points ({current_count} total)')
+
+                # Plot CT point cloud FIRST if enabled (so it appears behind fine points)
+                if self.show_ct_point_cloud and self.ct_point_cloud is not None:
+                    print(f"Plotting CT point cloud in fine tab with {len(self.ct_point_cloud)} points")  # Debug
+                    self.fine_canvas.axes.scatter(
+                        self.ct_point_cloud[:, 0],
+                        self.ct_point_cloud[:, 1],
+                        self.ct_point_cloud[:, 2],
+                        c='red', marker='.', s=1, alpha=0.6, label='CT Point Cloud'
+                    )
+
+                # Convert to numpy array for plotting
+                if self.fine_points_to_plot:
+                    points_array = np.array(self.fine_points_to_plot)
+
+                    # Plot points
+                    self.fine_canvas.axes.scatter(
+                        points_array[:, 0],
+                        points_array[:, 1],
+                        points_array[:, 2],
+                        c='blue', marker='.', s=3, alpha=0.8, label='Fine Points'
+                    )
+
+                # Add legend
+                if self.show_ct_point_cloud or len(self.fine_points_to_plot) > 0:
+                    self.fine_canvas.axes.legend()
+
+                # Auto-adjust axis limits to fit all points
+                all_points = []
+
+                if self.fine_points_to_plot:
+                    all_points.append(np.array(self.fine_points_to_plot))
+
+                if self.show_ct_point_cloud and self.ct_point_cloud is not None:
+                    all_points.append(self.ct_point_cloud)
+
+                if all_points:
+                    all_points = np.vstack(all_points)
+                    max_range = np.max(np.max(all_points, axis=0) - np.min(all_points, axis=0))
+                    mid_x = np.mean([np.min(all_points[:, 0]), np.max(all_points[:, 0])])
+                    mid_y = np.mean([np.min(all_points[:, 1]), np.max(all_points[:, 1])])
+                    mid_z = np.mean([np.min(all_points[:, 2]), np.max(all_points[:, 2])])
+
+                    self.fine_canvas.axes.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
+                    self.fine_canvas.axes.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
+                    self.fine_canvas.axes.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
+
+                # Refresh canvas
+                self.fine_canvas.draw()
+
+                # Update the last count
+                self.last_fine_points_count = current_count
+                self.fine_plot_needs_full_update = False
+
+        except Exception as e:
+            print(f"Error updating fine points visualization: {e}")
+
+    # [Rest of the methods remain the same - reset_coarse_points, perform_coarse_registration, etc.]
+    # I'll include a few key ones to show they're unchanged:
 
     def reset_coarse_points(self):
         """Reset all coarse registration points"""
@@ -821,50 +1224,6 @@ class NDITrackingUI(QMainWindow):
             self.log_message(f"Error performing coarse registration: {e}")
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
 
-    def update_fine_points(self, data):
-        """Update the fine points visualization and status information"""
-        try:
-            gathering_active = data.get("gathering_active", False)
-            points_count = data.get("total_points", 0)
-            frequency = data.get("frequency", 0)
-
-            # Update status labels
-            self.fine_status_label.setText("Gathering" if gathering_active else "Not gathering")
-            self.fine_points_count_label.setText(f"{points_count} points collected at {frequency} Hz")
-
-            # Update visualization if points are available and we're on the fine tab
-            if points_count > 0 and self.tabs.currentWidget() == self.fine_tab:
-                # Get the latest points to visualize
-                latest_points = data.get("latest_points", [])
-                all_points = data.get("points", [])
-
-                # If there are too many points, sample them
-                points_to_plot = all_points if len(all_points) > 0 else latest_points
-                if len(points_to_plot) > 500:
-                    indices = np.linspace(0, len(points_to_plot) - 1, 500, dtype=int)
-                    points_to_plot = [points_to_plot[i] for i in indices]
-
-                # Clear existing plot
-                self.fine_canvas.axes.clear()
-                self.fine_canvas.axes.set_xlabel('X')
-                self.fine_canvas.axes.set_ylabel('Y')
-                self.fine_canvas.axes.set_zlabel('Z')
-                self.fine_canvas.axes.set_title(f'Fine Registration Points ({points_count} total)')
-
-                # Convert to numpy array for plotting
-                if points_to_plot:
-                    points_array = np.array(points_to_plot)
-                    self.fine_canvas.axes.scatter(
-                        points_array[:, 0], points_array[:, 1], points_array[:, 2],
-                        c='g', marker='.', s=1
-                    )
-
-                # Refresh canvas
-                self.fine_canvas.draw()
-
-        except Exception as e:
-            self.log_message(f"Error updating fine points: {e}")
-
     def start_fine_gather(self):
         """Start gathering fine registration points"""
         try:
@@ -882,6 +1241,7 @@ class NDITrackingUI(QMainWindow):
 
                 if status == "started":
                     self.log_message(f"Fine point gathering started: {message}")
+                    self.fine_status_label.setText("Gathering")
 
                 else:
                     self.log_message(f"Note: {message}")
@@ -911,6 +1271,7 @@ class NDITrackingUI(QMainWindow):
                 if status == "success":
                     points_collected = result.get("total_points", 0)
                     self.log_message(f"Fine point gathering stopped: {points_collected} points collected")
+                    self.fine_status_label.setText("Not gathering")
 
                 else:
                     self.log_message(f"Note: {message}")
@@ -937,13 +1298,16 @@ class NDITrackingUI(QMainWindow):
             response = requests.post(f"{SERVER_URL}/reset_fine_gather")
 
             if response.status_code == 200:
-                # Clear plot
-                self.fine_canvas.axes.clear()
-                self.fine_canvas.axes.set_xlabel('X')
-                self.fine_canvas.axes.set_ylabel('Y')
-                self.fine_canvas.axes.set_zlabel('Z')
-                self.fine_canvas.axes.set_title('Fine Registration Points')
-                self.fine_canvas.draw()
+                # Reset tracking variables
+                self.last_fine_points_count = 0
+                self.fine_points_to_plot = []
+                self.fine_plot_needs_full_update = True
+
+                # Force update of visualization
+                self.update_fine_visualization_immediate()
+
+                # Reset point count
+                self.fine_points_count_label.setText("0 points")
 
                 self.log_message("All fine points reset successfully")
 
@@ -1243,12 +1607,20 @@ class NDITrackingUI(QMainWindow):
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
 
 
-def launch_ui():
+def launch_ui(ndi_server=None, config=None, args=None):
     app = QApplication(sys.argv)
-    window = NDITrackingUI()
+    window = NDITrackingUI(ndi_server, config, args)
     window.show()
     sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
-    launch_ui()
+    # Test with sample data
+    import numpy as np
+
+    # Create sample CT point cloud data for testing
+    sample_points = np.random.rand(5000, 3) * 100  # 5000 random 3D points
+    np.save('sample_ct_pointcloud.npy', sample_points)
+
+    config = {"CT_PC_address": "sample_ct_pointcloud.npy"}
+    launch_ui(None, config)

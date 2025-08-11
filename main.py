@@ -30,4 +30,4 @@ if __name__ == "__main__":
     server_thread = threading.Thread(target=ndiserver.run, daemon=True)
     server_thread.start()
 
-    launch_ui()
+    launch_ui(ndiserver, config, args)

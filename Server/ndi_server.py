@@ -237,6 +237,9 @@ class NDI_Server():
             """Reset all stored coarse points"""
             return self.coarse_registration.reset_coarse_points()
 
+        @self.app.get("/get_coarse_points")
+        def get_coarse_points():
+            return self.coarse_registration.get_coarse_points()
 
         @self.app.post("/set_coarse_point")
         def set_coarse_point(point_data: CoarsePointInput):
@@ -322,6 +325,15 @@ class NDI_Server():
         def get_fine_points_status():
             """Get the current status of fine point gathering"""
             return self.fine_registration.get_fine_points_status()
+
+        @self.app.get("/get_fine_points")
+        def get_fine_points():
+            fine_points = self.fine_registration.get_fine_points()
+
+            return {
+                "fine_points" : fine_points
+            }
+
 
         @self.app.post("/reset_fine_gather")
         def reset_fine_gather():

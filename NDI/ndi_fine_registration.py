@@ -273,7 +273,7 @@ class FineRegistration:
                     "message": f"Error getting data from NDI tracker: {str(e)}"
                 }
 
-        self.fine_points.extend(new_points)
+        self.fine_points.extend(list(new_points))
 
         logger.info(f"Added {len(new_points)} points, total fine points: {len(self.fine_points)}")
 
@@ -457,7 +457,7 @@ class FineRegistration:
 
                     # Add to fine points if valid
                     if not np.isnan(tip_position).any():
-                        self.fine_points.append(tip_position)
+                        self.fine_points.append(list(tip_position))
                         points_gathered += 1
 
             except Exception as e:
