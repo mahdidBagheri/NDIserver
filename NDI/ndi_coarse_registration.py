@@ -7,6 +7,8 @@ import open3d as o3d
 import threading
 
 # Setup logging
+from Utils.Utils import save_state
+
 logger = logging.getLogger(__name__)
 
 
@@ -269,7 +271,7 @@ class CoarseRegistration:
 
         # Store the transformation matrix
         self.transformation_matrix = transform
-
+        save_state("saved_state.json", {"coarse_transform":transform})
         logger.info(f"Coarse registration completed with RMSE: {rmse}")
 
         # Visualization info for response

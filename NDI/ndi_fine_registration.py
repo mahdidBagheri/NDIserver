@@ -438,48 +438,29 @@ class FineRegistration:
         while not stop_event.is_set():
             start_time = time.time()
 
-            if is_local:
-                # Get points from fine.txt data
-                if len(self.fine_matrices) == 0:
-                    logger.error("No fine matrices available for gathering")
-                    break
+            # Use real NDI tracker
+            if ndi_tracker is None:
+                logger.error("NDI tracker not provided")
+                break
 
-                # Get next matrix and cycle through
-                current_matrix = self.fine_matrices[self.streaming_position]
-                self.streaming_position = (self.streaming_position + 1) % len(self.fine_matrices)
+            try:
+                # Get tracking data
+                tracking = ndi_tracker.GetPosition()
 
-                # Calculate probe tip position
-                tip_position = np.dot(current_matrix, tip_vector)[:3]
+                if tracking and len(tracking) > 0:
+                    # Get probe matrix
+                    probe_matrix = tracking[self.config["tool_types"]["probe"]]
 
-                # Add to fine points if valid
-                if not np.isnan(tip_position).any():
-                    self.fine_points.append(tip_position)
-                    points_gathered += 1
+                    # Calculate probe tip position
+                    tip_position = np.dot(probe_matrix, tip_vector)[:3]
 
-            else:
-                # Use real NDI tracker
-                if ndi_tracker is None:
-                    logger.error("NDI tracker not provided")
-                    break
+                    # Add to fine points if valid
+                    if not np.isnan(tip_position).any():
+                        self.fine_points.append(tip_position)
+                        points_gathered += 1
 
-                try:
-                    # Get tracking data
-                    tracking = ndi_tracker.GetPosition()
-
-                    if tracking and len(tracking) > 0:
-                        # Get probe matrix
-                        probe_matrix = tracking[self.config["tool_types"]["probe"]]
-
-                        # Calculate probe tip position
-                        tip_position = np.dot(probe_matrix, tip_vector)[:3]
-
-                        # Add to fine points if valid
-                        if not np.isnan(tip_position).any():
-                            self.fine_points.append(tip_position)
-                            points_gathered += 1
-
-                except Exception as e:
-                    logger.warning(f"Error getting tracking data: {str(e)}")
+            except Exception as e:
+                logger.warning(f"Error getting tracking data: {str(e)}")
 
             # Log statistics periodically
             current_time = time.time()

@@ -552,11 +552,17 @@ class NDI_Server():
                     tool_visibility.update({tool:True})
             return tool_visibility
 
-        @self.app.post("/load_last_transform")
+        @self.app.post("/load_last_fine_transform")
         def load_last_transform():
             with open("saved_state.json") as f:
                 last_state = json.load(f)
             self.fine_registration.combined_transformation = np.asarray(last_state["combined_transform"])
+
+        @self.app.post("/load_last_coarse_transform")
+        def load_last_transform():
+            with open("saved_state.json") as f:
+                last_state = json.load(f)
+            self.coarse_registration.transformation_matrix = np.asarray(last_state["coarse_transform"])
 
 
         @self.app.on_event("shutdown")
