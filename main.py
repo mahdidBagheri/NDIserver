@@ -4,7 +4,10 @@
 import argparse
 import json
 
+from Server import ndi_server
+from UI.GUI import launch_ui
 import uvicorn
+import threading
 
 from Network.Broadcaster import IPBroadcaster
 from Server.ndi_server import NDI_Server
@@ -23,6 +26,8 @@ if __name__ == "__main__":
 
     broadcaster = IPBroadcaster(interval=3)
     broadcaster.start()
+    ndiserver = NDI_Server(config, args)
+    server_thread = threading.Thread(target=ndiserver.run, daemon=True)
+    server_thread.start()
 
-    ndi_server = NDI_Server(config, args)
-    ndi_server.run()
+    launch_ui()

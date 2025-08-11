@@ -17,9 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class FineRegistration:
-    def __init__(self):
+    def __init__(self, config):
         # Fine points storage
         self.fine_points = []
+        self.config = config
 
         # State variables
         self.gathering_active = False
@@ -315,7 +316,7 @@ class FineRegistration:
             }
 
         # Use the path for CT point cloud
-        ct_pc_path = f"CT_pc.npy"
+        ct_pc_path = self.config["CT_PC_address"]
 
         # Check if CT point cloud exists
         if not os.path.exists(ct_pc_path):

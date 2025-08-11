@@ -39,7 +39,7 @@ class NDI_Server():
         self.combined_transformation = None
 
         self.coarse_registration = CoarseRegistration(tip_vector=config["probe_tip_vector"])
-        self.fine_registration = FineRegistration()
+        self.fine_registration = FineRegistration(config=config)
         self.tool_calibration = ToolCalibration()
 
         if args.is_local:
