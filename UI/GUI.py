@@ -200,6 +200,35 @@ class NDITrackingUI(QMainWindow):
             print(f"Error loading CT point cloud: {e}")
             self.log_message(f"Error loading CT point cloud: {e}")
 
+    def transform_ct_point_cloud(self):
+        """Transform CT point cloud using the current coarse registration transformation"""
+        if self.ct_point_cloud is None or not hasattr(self.ndi_server, 'coarse_registration'):
+            return None
+
+        # Check if transformation matrix exists
+        if not hasattr(self.ndi_server.coarse_registration,
+                       'transformation_matrix') or self.ndi_server.coarse_registration.transformation_matrix is None:
+            print("No transformation matrix available")
+            return None
+
+        # Get transformation matrix
+        transform = self.ndi_server.coarse_registration.transformation_matrix
+        print(f"Using transformation matrix:\n{transform}")
+
+        # Apply transformation to each point in the CT point cloud
+        transformed_points = np.zeros_like(self.ct_point_cloud)
+        for i, point in enumerate(self.ct_point_cloud):
+            # Convert to homogeneous coordinates
+            homog_point = np.append(point, 1)
+            # Apply transformation
+            transformed_homog = np.dot(transform, homog_point)
+            # Convert back from homogeneous coordinates
+            transformed_points[i] = transformed_homog[:3]
+
+        print(f"Transformed {len(transformed_points)} CT points")
+        return transformed_points
+
+
     def closeEvent(self, event):
         # Stop background threads when window is closed
         self.server_status_thread.stop()
@@ -699,11 +728,16 @@ class NDITrackingUI(QMainWindow):
 
             # Plot CT point cloud FIRST if enabled (so it appears behind fine points)
             if self.show_ct_point_cloud and self.ct_point_cloud is not None:
-                print(f"Plotting CT point cloud with {len(self.ct_point_cloud)} points")
+                # Try to get transformed points
+                transformed_points = self.transform_ct_point_cloud()
+                points_to_plot = transformed_points if transformed_points is not None else self.ct_point_cloud
+
+                print(
+                    f"Plotting {'transformed' if transformed_points is not None else 'original'} CT point cloud with {len(points_to_plot)} points")
                 self.fine_canvas.axes.scatter(
-                    self.ct_point_cloud[:, 0],
-                    self.ct_point_cloud[:, 1],
-                    self.ct_point_cloud[:, 2],
+                    points_to_plot[:, 0],
+                    points_to_plot[:, 1],
+                    points_to_plot[:, 2],
                     c='red', marker='.', s=1, alpha=0.6, label='CT Point Cloud'
                 )
 
@@ -964,11 +998,16 @@ class NDITrackingUI(QMainWindow):
 
             # Plot CT point cloud if enabled
             if self.show_ct_point_cloud and self.ct_point_cloud is not None:
-                print(f"Plotting CT point cloud with {len(self.ct_point_cloud)} points")  # Debug
+                # Try to get transformed points
+                transformed_points = self.transform_ct_point_cloud()
+                points_to_plot = transformed_points if transformed_points is not None else self.ct_point_cloud
+
+                print(
+                    f"Plotting {'transformed' if transformed_points is not None else 'original'} CT point cloud with {len(points_to_plot)} points")
                 self.coarse_canvas.axes.scatter(
-                    self.ct_point_cloud[:, 0],
-                    self.ct_point_cloud[:, 1],
-                    self.ct_point_cloud[:, 2],
+                    points_to_plot[:, 0],
+                    points_to_plot[:, 1],
+                    points_to_plot[:, 2],
                     c='r', marker='.', s=1, alpha=0.5, label='CT Point Cloud'
                 )
 
@@ -1097,11 +1136,16 @@ class NDITrackingUI(QMainWindow):
 
                 # Plot CT point cloud FIRST if enabled (so it appears behind fine points)
                 if self.show_ct_point_cloud and self.ct_point_cloud is not None:
-                    print(f"Plotting CT point cloud in fine tab with {len(self.ct_point_cloud)} points")  # Debug
+                    # Try to get transformed points
+                    transformed_points = self.transform_ct_point_cloud()
+                    points_to_plot = transformed_points if transformed_points is not None else self.ct_point_cloud
+
+                    print(
+                        f"Plotting {'transformed' if transformed_points is not None else 'original'} CT point cloud in fine tab with {len(points_to_plot)} points")
                     self.fine_canvas.axes.scatter(
-                        self.ct_point_cloud[:, 0],
-                        self.ct_point_cloud[:, 1],
-                        self.ct_point_cloud[:, 2],
+                        points_to_plot[:, 0],
+                        points_to_plot[:, 1],
+                        points_to_plot[:, 2],
                         c='red', marker='.', s=1, alpha=0.6, label='CT Point Cloud'
                     )
 
