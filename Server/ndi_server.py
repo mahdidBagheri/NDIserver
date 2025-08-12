@@ -49,6 +49,11 @@ class NDI_Server():
             from NDI import NDI_Tracking
             self.ndi_tracking = NDI_Tracking.NDI_Tracking(config, args)
 
+        with open("saved_state.json") as f:
+            last_state = json.load(f)
+
+        self.fine_registration.combined_transformation = np.asarray(last_state["combined_transform"])
+        self.coarse_registration.coarse_transformation = np.asarray(last_state["coarse_transform"])
 
 
         self.define_logger()
@@ -502,7 +507,7 @@ class NDI_Server():
             if self.streaming_thread and self.streaming_thread.is_alive():
                 self.streaming_thread.join(timeout=2.0)
 
-            streaming_active = False
+            self.streaming_active = False
 
             return {
                 "status": "stopped",

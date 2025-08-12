@@ -16,8 +16,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Process NDI configuration.")
     parser.add_argument("--ndi_config_path", type=str, required=True, help="Path to the NDI configuration file (required)")
-    parser.add_argument("--is_local", type=bool, required=True, help="is local")
-    parser.add_argument("--reference_required", type=bool, required=True, help="need reference in the field")
+    parser.add_argument("--is_local", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--reference_required", action=argparse.BooleanOptionalAction, help="need reference in the field")
 
     args = parser.parse_args()
 

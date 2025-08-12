@@ -60,7 +60,7 @@ class IPBroadcaster:
             message = f"Device IP: {local_ip}".encode('utf-8')
             try:
                 self.sock.sendto(message, (self.broadcast_ip, self.port))
-                print(f"Broadcasting IP: {local_ip} on port {self.port}")
+                # print(f"Broadcasting IP: {local_ip} on port {self.port}")
             except Exception as e:
                 print(f"Broadcast error: {e}")
                 # If there's an error, try to recreate the socket
