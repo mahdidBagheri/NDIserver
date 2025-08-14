@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class FineRegistration:
-    def __init__(self):
+    def __init__(self, config, args):
         # Fine points storage
         self.fine_points = []
-
+        self.config = config
+        self.args = args
         # State variables
         self.gathering_active = False
         self.gathering_thread = None
@@ -447,17 +448,16 @@ class FineRegistration:
                 # Get tracking data
                 tracking = ndi_tracker.GetPosition()
 
-                if tracking and len(tracking) > 0:
-                    # Get probe matrix
-                    probe_matrix = tracking[self.config["tool_types"]["probe"]]
+                # Get probe matrix
+                probe_matrix = tracking[self.config["tool_types"]["probe"]]
+
+                if not probe_matrix is None:
 
                     # Calculate probe tip position
                     tip_position = np.dot(probe_matrix, tip_vector)[:3]
 
-                    # Add to fine points if valid
-                    if not np.isnan(tip_position).any():
-                        self.fine_points.append(tip_position)
-                        points_gathered += 1
+                    self.fine_points.append(tip_position)
+                    points_gathered += 1
 
             except Exception as e:
                 logger.warning(f"Error getting tracking data: {str(e)}")

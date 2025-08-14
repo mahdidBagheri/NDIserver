@@ -86,7 +86,7 @@ class PathGenerator:
 
         self.counter += 1
 
-        if self.counter == 3:
+        if self.counter in [100]:
             transform1 = np.array([[np.nan, np.nan, np.nan, np.nan],
                                    [np.nan, np.nan, np.nan, np.nan],
                                    [np.nan, np.nan, np.nan, np.nan],

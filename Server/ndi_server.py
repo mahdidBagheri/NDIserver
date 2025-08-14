@@ -39,7 +39,7 @@ class NDI_Server():
         self.combined_transformation = None
 
         self.coarse_registration = CoarseRegistration(tip_vector=config["probe_tip_vector"])
-        self.fine_registration = FineRegistration()
+        self.fine_registration = FineRegistration(config, args)
         self.tool_calibration = ToolCalibration()
 
         if args.is_local:
@@ -129,6 +129,16 @@ class NDI_Server():
                 "streaming_port": self.streaming_port if self.streaming_active else None
             }
 
+        @self.app.post("/start_raw_streaming")
+        def start_raw_streaming():
+            self.ndi_tracking.start_streaming()
+
+        @self.app.post("/set_raw_streaming_frequency")
+        def set_raw_streaming_frequency(frequency:int):
+            self.ndi_tracking.set_streaming_frequency(frequency)
+        @self.app.post("/stop_raw_streaming")
+        def stop_raw_streaming():
+            self.ndi_tracking.stop_streaming()
 
         # Data source management endpoints
         @self.app.post("/initialize_ndi")
@@ -273,14 +283,16 @@ class NDI_Server():
 
         # Fine registration endpoints
         @self.app.post("/start_fine_gather")
-        def start_fine_gather(frequency: int = 60):
+        def start_fine_gather(frequency: int = 60, streaming_raw_frequncy: int = 10):
             """Start gathering fine registration points"""
+            self.ndi_tracking.set_streaming_frequency(streaming_raw_frequncy)
             return self.fine_registration.start_fine_gather(frequency, self.config["probe_tip_vector"], self.ndi_tracking, self.args.is_local)
 
 
         @self.app.post("/end_fine_gather")
-        def end_fine_gather():
+        def end_fine_gather(streaming_raw_frequncy: int = 30):
             """Stop gathering fine registration points"""
+            self.ndi_tracking.set_streaming_frequency(streaming_raw_frequncy)
             result = self.fine_registration.end_fine_gather()
             result["data_source"] = "local files" if self.args.is_local else "NDI tracker"
             return result
@@ -382,9 +394,8 @@ class NDI_Server():
 
         # Streaming endpoints
         @self.app.post("/start_streaming")
-        def start_streaming(port: int = 11111, frequency: int = 30, force_stop_calibration: bool = False):
+        def start_streaming(port: int = 11111, frequency: int = 30, force_stop_calibration: bool = False, streaming_raw_frequncy:int=10):
             """Start streaming NDI tracking data over UDP"""
-
             # Check if tool calibration is active
             if self.tool_calibration.calibration_active:
                 if force_stop_calibration:
@@ -430,6 +441,7 @@ class NDI_Server():
             streaming_thread.start()
 
             self.streaming_active = True
+            self.ndi_tracking.set_streaming_frequency(streaming_raw_frequncy)
 
             return {
                 "status": "started",
@@ -442,7 +454,7 @@ class NDI_Server():
 
 
         @self.app.post("/stop_streaming")
-        def stop_streaming():
+        def stop_streaming(streaming_raw_frequncy:int = 30):
             """Stop the UDP streaming of NDI tracking data"""
 
             if not self.streaming_active:
@@ -453,7 +465,7 @@ class NDI_Server():
 
             # Signal the thread to stop
             self.streaming_stop_event.set()
-
+            self.ndi_tracking.set_streaming_frequency(streaming_raw_frequncy)
             # Wait for thread to finish (with timeout)
             if self.streaming_thread and self.streaming_thread.is_alive():
                 self.streaming_thread.join(timeout=2.0)
