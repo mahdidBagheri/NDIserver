@@ -34,7 +34,7 @@ class CoarseRegistration:
         self.tip_vector = tip_vector
 
         # Parse coarse file on initialization
-        self.parse_coarse_file()
+        # self.parse_coarse_file()
 
     def parse_coarse_file(self) -> Dict[int, np.ndarray]:
         """
@@ -166,11 +166,7 @@ class CoarseRegistration:
             Information about the set point
         """
 
-        if tool_matrix is None:
-            return {
-                "status": "error",
-                "message": "could not detect probe!"
-            }
+
         # Convert to numpy array
         unity_point_np = np.array(unity_point)
 

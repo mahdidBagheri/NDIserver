@@ -4,13 +4,10 @@ import os
 import time
 import threading
 from typing import List, Dict, Any, Optional, Tuple
-from io import BytesIO
-import base64
 import matplotlib
 
 matplotlib.use('Agg')  # Use non-interactive backend for server
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 # Setup logging
 logger = logging.getLogger(__name__)

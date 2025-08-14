@@ -28,13 +28,23 @@ class NDI_Tracking():
         if self.args.reference_required:
             if tracking[self.config["tool_types"]["reference"]] is None and self.last_reference is None:
                 raise Exception("could not detect reference! Reference is required in this mode, if you do not want the reference try reference_required = false")
-        self.last_reference = tracking[self.config["tool_types"]["reference"]]
-        try:
-            probe_relative_to_reference = np.linalg.inv(self.last_reference) @ tracking[self.config["tool_types"]["probe"]]
-            endoscope_relative_to_reference = np.linalg.inv(self.last_reference) @ tracking[self.config["tool_types"]["endoscope"]]
-            return [probe_relative_to_reference, tracking[self.config["tool_types"]["reference"]],endoscope_relative_to_reference]
-        except Exception as e:
-            print("Could not detect tool!")
+
+            self.last_reference = tracking[self.config["tool_types"]["reference"]]
+
+            transforms = [None,self.last_reference,None]
+            if tracking[self.config["tool_types"]["probe"]] is None:
+                print("Could not detect probe!")
+            else:
+                transforms[self.config["tool_types"]["probe"]] = np.linalg.inv(self.last_reference) @ tracking[self.config["tool_types"]["probe"]]
+
+            if tracking[self.config["tool_types"]["endoscope"]] is None:
+                print("Could not detect endoscope!")
+            else:
+                transforms[self.config["tool_types"]["endoscope"]] = np.linalg.inv(self.last_reference) @ tracking[self.config["tool_types"]["endoscope"]]
+
+            return transforms
+
+        else:
             return tracking
 
 

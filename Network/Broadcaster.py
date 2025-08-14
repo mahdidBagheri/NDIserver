@@ -54,13 +54,16 @@ class IPBroadcaster:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
+        show_one_time = True
         while self.running:
             local_ip = self.get_local_ip()
+            if show_one_time:
+                print(f"Broadcasting IP: {local_ip} on port {self.port}")
+                show_one_time = False
             message = f"Device IP: {local_ip}".encode('utf-8')
             try:
                 self.sock.sendto(message, (self.broadcast_ip, self.port))
-                print(f"Broadcasting IP: {local_ip} on port {self.port}")
+
             except Exception as e:
                 print(f"Broadcast error: {e}")
                 # If there's an error, try to recreate the socket

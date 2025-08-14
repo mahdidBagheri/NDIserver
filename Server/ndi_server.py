@@ -148,7 +148,7 @@ class NDI_Server():
                 try:
                     self.logger.info("Stopping NDI tracker for forced restart...")
                     self.ndi_tracking.stop()
-                    ndi_tracker_initialized = False
+                    self.ndi_tracker_initialized = False
                     self.logger.info("NDI tracker stopped successfully for restart")
                 except Exception as e:
                     self.logger.error(f"Error stopping NDI tracker: {str(e)}")
@@ -163,22 +163,19 @@ class NDI_Server():
                 self.logger.info("Initializing NDI tracker...")
                 self.ndi_tracking.start()
                 self.ndi_tracker_initialized = True
-
+                status_details = {}
                 # Check if initialization was successful by trying to get a position
-                try:
-                    tracking = self.ndi_tracking.GetPosition()
-                    if tracking is not None:
+                for i in range(5):
+                    try:
+                        tracking = self.ndi_tracking.GetPosition()
                         tools_detected = len(tracking)
                         self.logger.info(f"NDI tracker initialized successfully. Detected {tools_detected} tool(s).")
                         status_details = {
                             "tools_detected": tools_detected,
                         }
-                    else:
-                        self.logger.warning("NDI tracker initialized but no tracking data available.")
-                        status_details = {"tools_detected": 0}
-                except Exception as e:
-                    self.logger.warning(f"NDI tracker initialized but error when getting position: {str(e)}")
-                    status_details = {"warning": f"Could not verify tracking data: {str(e)}"}
+                    except Exception as e:
+                        self.logger.warning(f"NDI tracker initialized but error when getting position: {str(e)}")
+                        status_details = {"warning": f"Could not verify tracking data: {str(e)}"}
 
                 return {
                     "status": "success",
@@ -195,42 +192,6 @@ class NDI_Server():
                     "message": f"Failed to initialize NDI tracker: {str(e)}",
                     "ndi_tracker_status": "initialization_failed"
                 }
-
-
-        @self.app.post("/set_data_source")
-        def set_data_source():
-            """Set the data source for NDI tracking data"""
-
-            # If switching from local to real NDI
-            if not self.ndi_tracker_initialized:
-                try:
-                    self.logger.info("Initializing NDI tracker...")
-                    self.ndi_tracking.start()
-                    ndi_tracker_initialized = True
-                    ndi_status = "initialized"
-                except Exception as e:
-                    self.logger.error(f"Failed to initialize NDI tracker: {str(e)}")
-                    ndi_status = f"initialization failed: {str(e)}"
-
-            # If switching from real NDI to local
-            elif self.ndi_tracker_initialized:
-                try:
-                    self.logger.info("Stopping NDI tracker...")
-                    self.ndi_tracking.stop()
-                    ndi_tracker_initialized = False
-                    ndi_status = "stopped"
-                except Exception as e:
-                    self.logger.error(f"Error stopping NDI tracker: {str(e)}")
-                    ndi_status = f"error stopping: {str(e)}"
-            else:
-                ndi_status = "initialized" if self.ndi_tracker_initialized else "not initialized"
-
-            return {
-                "status": "success",
-                "is_local": self.args.is_local,
-                "ndi_tracker_status": ndi_status,
-                "data_source": "local server" if self.args.is_local else "NDI tracker"
-            }
 
         @self.app.post("/reset_coarse_points")
         def reset_coarse_points():
@@ -252,15 +213,21 @@ class NDI_Server():
             # Use real NDI tracker
             self.logger.info("Getting point from real NDI tracker")
 
-            if not self.ndi_tracker_initialized:
-                raise HTTPException(status_code=404, detail=f"NDI tracker not initialized.")
+            if not self.ndi_tracker_initialized and self.args.initialization_required:
+                return {
+                    "status": "error",
+                    "message": "could not detect tracker not initialized!"
+                }
 
             try:
                 # Get tracking data - NOTE: GetPosition returns just tracking data
                 tracking = self.ndi_tracking.GetPosition()
             except Exception as e:
-                self.logger.exception("Error getting data from NDI tracker")
-                raise HTTPException(status_code=404, detail=f"Error getting data from NDI tracker: {e}")
+                self.logger.exception(f"Error getting data from NDI tracker {e}")
+                return {
+                    "status": "error",
+                    "message": "could not detect reference!"
+                }
 
             # Check if we got valid tracking data
             if tracking[self.config["tool_types"]["probe"]] is not None:
@@ -268,12 +235,13 @@ class NDI_Server():
                 tool_matrix = tracking[self.config["tool_types"]["probe"]]
                 self.logger.info("Got real-time tool matrix from NDI tracker")
             else:
-                raise HTTPException(status_code=404, detail="probe not detected")
-
+                return {
+                    "status": "error",
+                    "message": "could not detect probe!"
+                }
 
             # Set the coarse point using the tool matrix and unity point
             result = self.coarse_registration.set_coarse_point(unity_point, point_number, tool_matrix)
-
             # Use the current tip vector for calculating ndi_point
             # If tool is calibrated, use that instead
             tool_tip = self.config["probe_tip_vector"]
@@ -297,7 +265,7 @@ class NDI_Server():
             # Update the combined transformation if successful
             if result.get("status") != "error" and "transformation_matrix" in result:
                 # If we only have coarse, use that as combined
-                combined_transformation = np.array(result["transformation_matrix"])
+                self.combined_transformation = np.array(result["transformation_matrix"])
                 self.logger.info("Updated combined transformation with coarse registration result")
 
             return result
@@ -348,7 +316,7 @@ class NDI_Server():
 
             # Update the combined transformation if successful
             if result.get("status") != "error" and "combined_transformation" in result:
-                combined_transformation = np.array(result["combined_transformation"])
+                self.combined_transformation = np.array(result["combined_transformation"])
                 self.logger.info("Updated combined transformation with fine registration result")
 
             return result
@@ -490,7 +458,7 @@ class NDI_Server():
             if self.streaming_thread and self.streaming_thread.is_alive():
                 self.streaming_thread.join(timeout=2.0)
 
-            streaming_active = False
+            self.streaming_active = False
 
             return {
                 "status": "stopped",
@@ -590,11 +558,6 @@ class NDI_Server():
                 except Exception as e:
                     self.logger.error(f"Error stopping NDI tracker: {str(e)}")
 
-
-
-
-
-
     def udp_streaming_thread(self, port, stop_event, frequency=30):
         """Thread function to stream NDI transformations over UDP"""
 
@@ -624,55 +587,49 @@ class NDI_Server():
                     # Get tracking data - NOTE: GetPosition returns just tracking data
                     tracking = self.ndi_tracking.GetPosition()
 
-                    if tracking and len(tracking) > 0:
-                        # Get probe matrix
-                        probe_matrix = tracking[self.config["tool_types"]["probe"]]
-                        endospcope_matrix= tracking[self.config["tool_types"]["endospcope"]]
 
-                        # Calculate probe tip position
-                        tool_tip = self.tip_vector
-                        if self.tool_calibration.get_tool_tip_vector() is not None:
-                            # Use calibrated tool tip if available
-                            calibrated_tip = self.tool_calibration.get_tool_tip_vector()
-                            tool_tip = np.append(calibrated_tip, 1.0)  # Convert to homogeneous coordinates
+                    probe_matrix = tracking[self.config["tool_types"]["probe"]]
+                    endospcope_matrix= tracking[self.config["tool_types"]["endospcope"]]
 
-                        tip_position = np.dot(probe_matrix, tool_tip)[:3]
+                    # Calculate probe tip position
+                    tool_tip = self.tip_vector
+                    if self.tool_calibration.get_tool_tip_vector() is not None:
+                        # Use calibrated tool tip if available
+                        calibrated_tip = self.tool_calibration.get_tool_tip_vector()
+                        tool_tip = np.append(calibrated_tip, 1.0)  # Convert to homogeneous coordinates
 
-                        # Apply transformations
-                        transformed_position = tip_position
-                        transformed_matrix = probe_matrix.copy()
+                    tip_position = np.dot(probe_matrix, tool_tip)[:3]
 
-                        if self.combined_transformation is not None:
-                            # Create homogeneous position for combined transform
-                            homogeneous_pos = np.append(tip_position, 1.0)
-                            transformed_position = np.dot(self.combined_transformation, homogeneous_pos)[:3]
+                    # Apply transformations
+                    transformed_position = tip_position
+                    transformed_matrix = []
+                    endoscope_transformed_matrix = []
 
-                        # Apply inverse of fine transformation from the left to make matrix
-                        # relative to the registered coordinate system
-                        if fine_inverse is not None:
-                            transformed_matrix = np.linalg.inv(self.combined_transformation) @ probe_matrix
-                            endoscope_transformed_matrix = np.linalg.inv(self.combined_transformation) @ endospcope_matrix
+                    if self.combined_transformation is not None:
+                        # Create homogeneous position for combined transform
+                        homogeneous_pos = np.append(tip_position, 1.0)
+                        transformed_position = np.dot(self.combined_transformation, homogeneous_pos)[:3]
+
+                    # Apply inverse of fine transformation from the left to make matrix
+                    # relative to the registered coordinate system
+
+                    if fine_inverse is not None:
+                        transformed_matrix = np.linalg.inv(self.combined_transformation) @ probe_matrix
+                        endoscope_transformed_matrix = np.linalg.inv(self.combined_transformation) @ endospcope_matrix
 
 
-                        # Create data packet
-                        data = {
-                            "position": transformed_position.tolist(),
-                            "source": "ndi_tracker",
-                            "original": tip_position.tolist(),
-                            "timestamp": time.time(),
-                            "frame": frame_counter,
-                            # Quality information not available since GetPosition only returns tracking
-                            "matrix": probe_matrix.tolist(),  # Original matrix
-                            "transformed_matrix": transformed_matrix.tolist(),
-                            "endoscope_transformed_matrix":endoscope_transformed_matrix.tolist()
-                        }
-                    else:
-                        # No tracking data available
-                        data = {
-                            "error": "No tracking data",
-                            "timestamp": time.time(),
-                            "frame": frame_counter
-                        }
+                    # Create data packet
+                    data = {
+                        "position": transformed_position.tolist(),
+                        "source": "ndi_tracker",
+                        "original": tip_position.tolist(),
+                        "timestamp": time.time(),
+                        "frame": frame_counter,
+                        # Quality information not available since GetPosition only returns tracking
+                        "matrix": probe_matrix.tolist(),  # Original matrix
+                        "transformed_matrix": transformed_matrix.tolist(),
+                        "endoscope_transformed_matrix":endoscope_transformed_matrix.tolist()
+                    }
                 except Exception as e:
                     # Error getting tracking data
                     data = {
