@@ -13,10 +13,17 @@ class NDI_Tracking_Simulator(NDI_Tracking):
 
     def get_tracking(self):
         tracking = self.path_gen.get_transformation_matrices()
+        detections = {}
         for i, t in enumerate(tracking):
             if np.isnan(tracking[i]).any():
                 tracking[i] = None
-            print(t)
+
+        for k in list(self.config["tool_types"].keys()):
+            if tracking[self.config["tool_types"][k]] is None:
+                detections.update({k:False})
+            else:
+                detections.update({k: True})
+        print(detections)
         return tracking
 
     def stop(self):

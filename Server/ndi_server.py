@@ -132,6 +132,7 @@ class NDI_Server():
         @self.app.post("/start_raw_streaming")
         def start_raw_streaming():
             if not self.ndi_tracker_initialized and self.args.initialization_required:
+                self.logger.error("initialization required")
                 return {
                     "status": "error",
                     "details": "initialization required"
@@ -225,8 +226,17 @@ class NDI_Server():
             point_number = point_data.point_number
 
             if len(unity_point) != 3:
-                raise HTTPException(status_code=400, detail="unity_point must have exactly 3 elements")
+                return {
+                    "status":"error",
+                    "details":"unity_point must have exactly 3 elements"
+                }
 
+            if not self.ndi_tracker_initialized and self.args.initialization_required:
+                self.logger.error("initialization required")
+                return {
+                    "status": "error",
+                    "details": "initialization required"
+                }
 
             # Use real NDI tracker
             self.logger.info("Getting point from real NDI tracker")
@@ -260,6 +270,7 @@ class NDI_Server():
 
             # Set the coarse point using the tool matrix and unity point
             result = self.coarse_registration.set_coarse_point(unity_point, point_number, tool_matrix)
+            print(self.coarse_registration.coarse_points)
             # Use the current tip vector for calculating ndi_point
             # If tool is calibrated, use that instead
             tool_tip = self.config["probe_tip_vector"]
@@ -407,6 +418,7 @@ class NDI_Server():
             # Check if tool calibration is active
 
             if not self.ndi_tracker_initialized and self.args.initialization_required:
+                self.logger.error("initialization required")
                 return {
                     "status": "error",
                     "details": "initialization required"
@@ -532,6 +544,16 @@ class NDI_Server():
         @self.app.post("/get_probe_touchpoint")
         def get_probe_touchpoint(probe_idx: int = 0, endoscope_idx : int = 2 ):
             return self.tool_calibration.calculate_touch_point(self.ndi_tracking, self.config["probe_tip_vector"][0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
+
+        @self.app.post("/find_reference")
+        def find_reference(max_tries:int = 50, wait_time:float=1.0):
+            if not self.ndi_tracker_initialized and self.args.initialization_required:
+                return {
+                    "status":"error",
+                    "details":"initialization required"
+                }
+            r = self.ndi_tracking.find_reference(max_tries, wait_time)
+            return r
 
         @self.app.post('/check_tools')
         def check_tools():

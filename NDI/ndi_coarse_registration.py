@@ -174,10 +174,15 @@ class CoarseRegistration:
         ndi_point = np.dot(tool_matrix, self.tip_vector)[:3]
 
         # Store the points
-        self.coarse_points["unity_points"].append(unity_point_np)
-        self.coarse_points["ndi_points"].append(ndi_point)
-        self.coarse_points["point_numbers"].append(point_number)
+        if point_number not in self.coarse_points["point_numbers"]:
+            self.coarse_points["unity_points"].append(unity_point_np)
+            self.coarse_points["ndi_points"].append(ndi_point)
+            self.coarse_points["point_numbers"].append(point_number)
+        else:
+            self.coarse_points["unity_points"][point_number] = unity_point_np
+            self.coarse_points["ndi_points"][point_number] = ndi_point
 
+        a = 0
         return {
             "status": "success",
             "tool_matrix": tool_matrix.tolist(),

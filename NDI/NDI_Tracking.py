@@ -25,12 +25,39 @@ class NDI_Tracking():
         self.TRACKER = NDITracker(self.SETTINGS)
         self.TRACKER.start_tracking()
 
+    def find_reference(self, max_tries = 50, wait_time=0.2):
+
+        for i in range(max_tries):
+            tracking = self.get_tracking()
+            if tracking[self.config["tool_types"]["reference"]] is None:
+                time.sleep(wait_time)
+            else:
+                self.last_reference = tracking[self.config["tool_types"]["reference"]]
+                return {
+                    "status": "success",
+                    "details": "reference found",
+                    "transform":f"{self.last_reference}",
+                    "tries":f"{i}"
+                }
+        return {
+            "status": "error",
+            "details": "could not find reference"
+        }
+
+
     def get_tracking(self):
         port_handles, timestamps, framenumbers, tracking, quality = self.TRACKER.get_frame()
+        detections = {}
         for i, t in enumerate(tracking):
             if np.isnan(tracking[i]).any():
                 tracking[i] = None
-            print(t)
+
+        for k,v in self.config["tool_types"]:
+            if tracking[v] == None:
+                detections.update({k:"False"})
+            else:
+                detections.update({k: "True"})
+        print(detections)
         return tracking
 
     def GetPosition(self):

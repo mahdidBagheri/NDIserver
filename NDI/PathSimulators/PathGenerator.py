@@ -15,7 +15,8 @@ class PathGenerator:
         self.time_scale = time_scale
         self.noise_level = noise_level
         self.start_time = time.time()
-        self.counter= 0
+        self.counter1 = 0
+        self.counter2 = 0
 
     def _create_transform_matrix(self, translation, rotation_euler):
         """
@@ -81,16 +82,23 @@ class PathGenerator:
 
         # Create transformation matrices
         transform1 = self._create_transform_matrix(translation1, rotation1)
-
-        transform2 = self._create_transform_matrix(translation2, rotation2)
-
-        self.counter += 1
-
-        if self.counter in [100]:
+        self.counter1 += 1
+        l = [1, 2, 5, 6]
+        l.extend(range(50,200))
+        if self.counter1 in l:
             transform1 = np.array([[np.nan, np.nan, np.nan, np.nan],
                                    [np.nan, np.nan, np.nan, np.nan],
                                    [np.nan, np.nan, np.nan, np.nan],
                                    [0.0, 0.0, 0.0, 1.0]])
+
+        transform2 = self._create_transform_matrix(translation2, rotation2)
+        self.counter2 += 1
+        if self.counter2 in [1,2,3]:
+            transform2 = np.array([[np.nan, np.nan, np.nan, np.nan],
+                                   [np.nan, np.nan, np.nan, np.nan],
+                                   [np.nan, np.nan, np.nan, np.nan],
+                                   [0.0, 0.0, 0.0, 1.0]])
+
         transform3 = self._create_transform_matrix(translation3, rotation3)
 
 

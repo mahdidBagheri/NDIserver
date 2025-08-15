@@ -334,7 +334,7 @@ class ToolCalibration:
             # Filter out matrices with NaN values
             valid_matrices = []
             for matrix in matrices:
-                if not np.isnan(matrix).any():
+                if not None:
                     valid_matrices.append(matrix)
 
             if len(valid_matrices) < 10:
@@ -714,7 +714,7 @@ class ToolCalibration:
             endoscope_matrix = tracking_data[endoscope_idx]
 
             # Check if matrices contain NaN values
-            if np.isnan(probe_matrix).any() or np.isnan(endoscope_matrix).any():
+            if probe_matrix is None or endoscope_matrix is None:
                 return {
                     "status": "error",
                     "message": "Tracking matrices contain NaN values"
