@@ -171,11 +171,12 @@ class NDITrackerUI:
         ttk.Spinbox(gather_frame, from_=10, to=100, textvariable=self.fine_freq_var, width=5).grid(row=0, column=1,
                                                                                                    padx=5, pady=5)
 
-        self.fine_gather_button = ttk.Button(gather_frame, text="Start Fine Gathering",
-                                             command=self.toggle_fine_gathering)
-        self.fine_gather_button.grid(row=0, column=2, padx=5, pady=5)
-
-        ttk.Button(gather_frame, text="Reset Fine Gathering", command=self.reset_fine_gathering).grid(row=0, column=3,
+        # Changed to separate start/stop buttons
+        ttk.Button(gather_frame, text="Start Fine Gathering", command=self.start_fine_gathering).grid(row=0, column=2,
+                                                                                                      padx=5, pady=5)
+        ttk.Button(gather_frame, text="Stop Fine Gathering", command=self.stop_fine_gathering).grid(row=0, column=3,
+                                                                                                    padx=5, pady=5)
+        ttk.Button(gather_frame, text="Reset Fine Gathering", command=self.reset_fine_gathering).grid(row=0, column=4,
                                                                                                       padx=5, pady=5)
 
         # Fine registration controls
@@ -236,13 +237,15 @@ class NDITrackerUI:
         ttk.Checkbutton(device_frame, text="Force Stop Streaming", variable=self.force_stop_var).pack(side="left",
                                                                                                       padx=5, pady=5)
 
-        # Calibration controls
+        # Calibration controls - Changed to separate buttons
         control_frame = ttk.Frame(calib_frame)
         control_frame.pack(fill="x", padx=5, pady=5)
 
-        self.calib_button = ttk.Button(control_frame, text="Start Tool Calibration",
-                                       command=self.toggle_tool_calibration)
-        self.calib_button.pack(side="left", padx=5, pady=5)
+        ttk.Button(control_frame, text="Start Tool Calibration", command=self.start_tool_calibration).pack(side="left",
+                                                                                                           padx=5,
+                                                                                                           pady=5)
+        ttk.Button(control_frame, text="Stop Tool Calibration", command=self.stop_tool_calibration).pack(side="left",
+                                                                                                         padx=5, pady=5)
 
         self.visualize_calib_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(control_frame, text="Visualize", variable=self.visualize_calib_var).pack(side="left", padx=5,
@@ -551,34 +554,31 @@ class NDITrackerUI:
         else:
             self.log(f"Failed to load coarse transformation: {response.get('details')}")
 
-    def toggle_fine_gathering(self):
-        if not self.fine_gathering_active:
-            # Start fine gathering
-            frequency = self.fine_freq_var.get()
-            self.log(f"Starting fine point gathering at {frequency} Hz...")
+    # Split the fine gathering functions into start and stop
+    def start_fine_gathering(self):
+        frequency = self.fine_freq_var.get()
+        self.log(f"Starting fine point gathering at {frequency} Hz...")
 
-            response = self.api_call("/start_fine_gather", "post",
-                                     {"frequency": frequency, "streaming_raw_frequncy": self.raw_freq_var.get()})
+        response = self.api_call("/start_fine_gather", "post",
+                                 {"frequency": frequency, "streaming_raw_frequncy": self.raw_freq_var.get()})
 
-            if response.get("status") == "started":
-                self.fine_gathering_active = True
-                self.fine_gather_button.config(text="End Fine Gathering")
-                self.log("Fine point gathering started")
-            else:
-                self.log(f"Failed to start fine gathering: {response.get('details')}")
+        if response.get("status") == "started":
+            self.fine_gathering_active = True
+            self.log("Fine point gathering started")
         else:
-            # End fine gathering
-            self.log("Ending fine point gathering...")
+            self.log(f"Failed to start fine gathering: {response.get('details')}")
 
-            response = self.api_call("/end_fine_gather", "post",
-                                     {"streaming_raw_frequncy": self.raw_freq_var.get()})
+    def stop_fine_gathering(self):
+        self.log("Stopping fine point gathering...")
 
-            if response.get("status") == "success":
-                self.fine_gathering_active = False
-                self.fine_gather_button.config(text="Start Fine Gathering")
-                self.log(f"Fine gathering ended, collected {response.get('points_collected')} points")
-            else:
-                self.log(f"Failed to end fine gathering: {response.get('details')}")
+        response = self.api_call("/end_fine_gather", "post",
+                                 {"streaming_raw_frequncy": self.raw_freq_var.get()})
+
+        if response.get("status") == "success":
+            self.fine_gathering_active = False
+            self.log(f"Fine gathering stopped, collected {response.get('points_collected')} points")
+        else:
+            self.log(f"Failed to stop fine gathering: {response.get('details')}")
 
     def reset_fine_gathering(self):
         self.log("Resetting fine gathering data...")
@@ -598,10 +598,6 @@ class NDITrackerUI:
 
         if "gathering_active" in response:
             self.fine_gathering_active = response["gathering_active"]
-            if self.fine_gathering_active:
-                self.fine_gather_button.config(text="End Fine Gathering")
-            else:
-                self.fine_gather_button.config(text="Start Fine Gathering")
 
     def perform_fine_registration(self):
         id_value = self.fine_id_var.get()
@@ -638,37 +634,32 @@ class NDITrackerUI:
         else:
             self.log(f"Failed to load fine transformation: {response.get('details')}")
 
-    # Tool calibration functions
-    def toggle_tool_calibration(self):
-        if not self.tool_calibration_active:
-            # Start tool calibration
-            device = self.device_var.get()
-            force_stop = self.force_stop_var.get()
+    # Split the tool calibration functions into start and stop
+    def start_tool_calibration(self):
+        device = self.device_var.get()
+        force_stop = self.force_stop_var.get()
 
-            self.log(f"Starting tool calibration (device={device}, force_stop_streaming={force_stop})...")
+        self.log(f"Starting tool calibration (device={device}, force_stop_streaming={force_stop})...")
 
-            response = self.api_call("/start_tool_calibration", "post",
-                                     {"force_stop_streaming": force_stop, "device": device})
+        response = self.api_call("/start_tool_calibration", "post",
+                                 {"force_stop_streaming": force_stop, "device": device})
 
-            if response.get("status") == "started":
-                self.tool_calibration_active = True
-                self.calib_button.config(text="End Tool Calibration")
-                self.log("Tool calibration started")
-            else:
-                self.log(f"Failed to start tool calibration: {response.get('details')}")
+        if response.get("status") == "started":
+            self.tool_calibration_active = True
+            self.log("Tool calibration started")
         else:
-            # End tool calibration
-            self.log("Ending tool calibration...")
+            self.log(f"Failed to start tool calibration: {response.get('details')}")
 
-            response = self.api_call("/end_tool_calibration", "post")
+    def stop_tool_calibration(self):
+        self.log("Stopping tool calibration...")
 
-            if response.get("status") == "success":
-                self.tool_calibration_active = False
-                self.calib_button.config(text="Start Tool Calibration")
-                self.log(
-                    f"Tool calibration ended, collected {response.get('transformations_collected')} transformations")
-            else:
-                self.log(f"Failed to end tool calibration: {response.get('details')}")
+        response = self.api_call("/end_tool_calibration", "post")
+
+        if response.get("status") == "success":
+            self.tool_calibration_active = False
+            self.log(f"Tool calibration stopped, collected {response.get('transformations_collected')} transformations")
+        else:
+            self.log(f"Failed to stop tool calibration: {response.get('details')}")
 
     def calibrate_tool(self):
         visualize = self.visualize_calib_var.get()
@@ -696,10 +687,6 @@ class NDITrackerUI:
 
         if "calibration_active" in response:
             self.tool_calibration_active = response["calibration_active"]
-            if self.tool_calibration_active:
-                self.calib_button.config(text="End Tool Calibration")
-            else:
-                self.calib_button.config(text="Start Tool Calibration")
 
     def load_tool_transformations(self):
         filename = filedialog.askopenfilename(
