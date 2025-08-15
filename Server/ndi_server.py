@@ -131,7 +131,15 @@ class NDI_Server():
 
         @self.app.post("/start_raw_streaming")
         def start_raw_streaming():
+            if not self.ndi_tracker_initialized and self.args.initialization_required:
+                return {
+                    "status": "error",
+                    "details": "initialization required"
+                }
+
             self.ndi_tracking.start_streaming()
+
+
 
         @self.app.post("/set_raw_streaming_frequency")
         def set_raw_streaming_frequency(frequency:int):
@@ -394,9 +402,15 @@ class NDI_Server():
 
         # Streaming endpoints
         @self.app.post("/start_streaming")
-        def start_streaming(port: int = 11111, frequency: int = 30, force_stop_calibration: bool = False, streaming_raw_frequncy:int=10):
+        def start_streaming(port: int = 11111, frequency: int = 30, force_stop_calibration: bool = False, streaming_raw_frequency:int=10):
             """Start streaming NDI tracking data over UDP"""
             # Check if tool calibration is active
+
+            if not self.ndi_tracker_initialized and self.args.initialization_required:
+                return {
+                    "status": "error",
+                    "details": "initialization required"
+                }
             if self.tool_calibration.calibration_active:
                 if force_stop_calibration:
                     # Stop tool calibration first
@@ -441,7 +455,7 @@ class NDI_Server():
             streaming_thread.start()
 
             self.streaming_active = True
-            self.ndi_tracking.set_streaming_frequency(streaming_raw_frequncy)
+            self.ndi_tracking.set_streaming_frequency(streaming_raw_frequency)
 
             return {
                 "status": "started",
@@ -537,13 +551,20 @@ class NDI_Server():
             with open("saved_state.json") as f:
                 last_state = json.load(f)
             self.fine_registration.combined_transformation = np.asarray(last_state["combined_transform"])
+            return {
+                "status":"success",
+                "transformation":f"{self.fine_registration.combined_transformation}"
+            }
 
         @self.app.post("/load_last_coarse_transform")
         def load_last_transform():
             with open("saved_state.json") as f:
                 last_state = json.load(f)
             self.coarse_registration.transformation_matrix = np.asarray(last_state["coarse_transform"])
-
+            return {
+                "status":"success",
+                "transformation":f"{self.coarse_registration.transformation_matrix}"
+            }
 
         @self.app.on_event("shutdown")
         def shutdown_event():
