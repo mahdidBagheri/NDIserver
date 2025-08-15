@@ -1,6 +1,6 @@
 import argparse
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import numpy as np
 import uvicorn
@@ -117,7 +117,10 @@ class NDI_Server():
                     "client_ip": client_ip
                 }
             except socket.error:
-                raise HTTPException(status_code=400, detail="Invalid IP address format")
+                return {
+                    "status":"error",
+                    "details":"Invalid IP address format"
+                }
 
 
         @self.app.get("/get_client_ip")
@@ -333,10 +336,10 @@ class NDI_Server():
             """Perform fine registration using ICP"""
 
             if self.coarse_registration.transformation_matrix is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Coarse registration must be performed first. Please call /coarse_register endpoint."
-                )
+                return {
+                    "status":"error",
+                    "details":"Coarse registration must be performed first. Please call /coarse_register endpoint."
+                }
 
             result = self.fine_registration.perform_fine_registration(
                 id=id,
@@ -365,10 +368,11 @@ class NDI_Server():
                     stop_streaming()
                     self.logger.info("Forced stop of UDP streaming to start tool calibration")
                 else:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="UDP streaming is active. Stop streaming first or use force_stop_streaming=true."
-                    )
+
+                    return {
+                        "status": "error",
+                        "details": "UDP streaming is active. Stop streaming first or use force_stop_streaming=true."
+                    }
 
             # Start tool calibration
 
@@ -429,10 +433,11 @@ class NDI_Server():
                     end_tool_calibration()
                     self.logger.info("Forced stop of tool calibration to start streaming")
                 else:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Tool calibration is active. Stop calibration first or use force_stop_calibration=true."
-                    )
+
+                    return {
+                        "status": "error",
+                        "details": "Tool calibration is active. Stop calibration first or use force_stop_calibration=true."
+                    }
 
             if self.streaming_active:
                 return {
@@ -444,10 +449,16 @@ class NDI_Server():
 
             # Validate parameters
             if port < 1024 or port > 65535:
-                raise HTTPException(status_code=400, detail="Port must be between 1024 and 65535")
+                return {
+                    "status": "error",
+                    "details": "Port must be between 1024 and 65535"
+                }
 
             if frequency < 1 or frequency > 100:
-                raise HTTPException(status_code=400, detail="Frequency must be between 1 and 100 Hz")
+                return {
+                    "status": "error",
+                    "details": "Frequency must be between 1 and 100 Hz"
+                }
 
             # Check if fine registration has been performed
             if self.combined_transformation is None:
