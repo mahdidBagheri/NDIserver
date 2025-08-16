@@ -554,7 +554,8 @@ class NDI_Server():
 
         @self.app.post("/get_probe_touchpoint")
         def get_probe_touchpoint(probe_idx: int = 0, endoscope_idx : int = 2 ):
-            return self.tool_calibration.calculate_touch_point(self.ndi_tracking, self.config["probe_tip_vector"][0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
+            r = self.tool_calibration.calculate_touch_point(self.ndi_tracking, self.config["probe_tip_vector"][0:3], probe_idx=probe_idx, endoscope_idx=endoscope_idx)
+            return r
 
         @self.app.post("/find_reference")
         def find_reference(max_tries:int = 50, wait_time:float=1.0):

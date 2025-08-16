@@ -52,11 +52,11 @@ class NDI_Tracking():
             if np.isnan(tracking[i]).any():
                 tracking[i] = None
 
-        for k,v in self.config["tool_types"]:
-            if tracking[v] == None:
-                detections.update({k:"False"})
+        for k in list(self.config["tool_types"].keys()):
+            if tracking[self.config["tool_types"][k]] is None:
+                detections.update({k:False})
             else:
-                detections.update({k: "True"})
+                detections.update({k: True})
         print(detections)
         return tracking
 
@@ -67,7 +67,8 @@ class NDI_Tracking():
                 raise Exception(
                     "could not detect reference! Reference is required in this mode, if you do not want the reference try reference_required = false")
 
-            self.last_reference = tracking[self.config["tool_types"]["reference"]]
+            if tracking[self.config["tool_types"]["reference"]] is not None:
+                self.last_reference = tracking[self.config["tool_types"]["reference"]]
 
             transforms = [None, self.last_reference, None]
             if tracking[self.config["tool_types"]["probe"]] is None:

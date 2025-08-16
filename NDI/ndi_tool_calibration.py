@@ -714,12 +714,16 @@ class ToolCalibration:
             endoscope_matrix = tracking_data[endoscope_idx]
 
             # Check if matrices contain NaN values
-            if probe_matrix is None or endoscope_matrix is None:
+            if probe_matrix is None:
                 return {
                     "status": "error",
-                    "message": "Tracking matrices contain NaN values"
+                    "message": "did not detect probe"
                 }
-
+            if endoscope_matrix is None:
+                return {
+                    "status": "error",
+                    "message": "did not detect second tool (endoscope)"
+                }
             # Calculate probe tip in global coordinates
             # Convert tip vector to homogeneous coordinates (add 1 as 4th element)
             probe_tip_homog = np.append(probe_tip_vector, 1)

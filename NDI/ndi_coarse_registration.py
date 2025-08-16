@@ -179,8 +179,8 @@ class CoarseRegistration:
             self.coarse_points["ndi_points"].append(ndi_point)
             self.coarse_points["point_numbers"].append(point_number)
         else:
-            self.coarse_points["unity_points"][point_number] = unity_point_np
-            self.coarse_points["ndi_points"][point_number] = ndi_point
+            self.coarse_points["unity_points"][self.coarse_points["point_numbers"].index(point_number)] = unity_point_np
+            self.coarse_points["ndi_points"][self.coarse_points["point_numbers"].index(point_number)] = ndi_point
 
         a = 0
         return {

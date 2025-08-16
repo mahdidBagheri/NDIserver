@@ -36,7 +36,7 @@ class FineRegistration:
         self.fine_transformation_matrix = None
 
         # Load matrices from fine.txt
-        self.parse_fine_file()
+        # self.parse_fine_file()
 
         self.combined_transformation = None
 
