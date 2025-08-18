@@ -1,6 +1,6 @@
 {
   "tool_types": {"probe": 0, "reference": 1, "endoscope": 2},
-  "CT_pc": "config/CT_pc.npy",
+  "CT_pc": "CT_pc.npy",
   "device_params": {
     "tracker type": "polaris",
     "romfiles": [
