@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
@@ -289,10 +290,10 @@ class NDI_Server():
             return result
 
         @self.app.post("/coarse_register")
-        def coarse_register(visualize: bool = False):
+        async def coarse_register(visualize: bool = False):
             """Perform coarse registration"""
 
-            result = self.coarse_registration.perform_coarse_registration(visualize)
+            result = await asyncio.wait_for(self.coarse_registration.perform_coarse_registration(visualize),timeout=60.0)
 
             # Update the combined transformation if successful
             if result.get("status") != "error" and "transformation_matrix" in result:
@@ -332,7 +333,7 @@ class NDI_Server():
             return result
 
         @self.app.post("/fine_register")
-        def fine_register(id: int, downsample_factor: float = 1.0, visualize: bool = False):
+        async def fine_register(id: int, downsample_factor: float = 1.0, visualize: bool = False):
             """Perform fine registration using ICP"""
 
             if self.coarse_registration.transformation_matrix is None:
@@ -340,13 +341,14 @@ class NDI_Server():
                     "status":"error",
                     "details":"Coarse registration must be performed first. Please call /coarse_register endpoint."
                 }
-
-            result = self.fine_registration.perform_fine_registration(
+            result = await asyncio.wait_for(self.fine_registration.perform_fine_registration(
                 id=id,
                 coarse_transformation_matrix=self.coarse_registration.transformation_matrix,
                 downsample_factor=downsample_factor,
                 visualize=visualize
-            )
+            ),timeout=60.0)
+
+
 
             # Update the combined transformation if successful
             if result.get("status") != "error" and "combined_transformation" in result:

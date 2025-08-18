@@ -207,7 +207,7 @@ class CoarseRegistration:
             "num_points": len(self.coarse_points["point_numbers"])
         }
 
-    def perform_coarse_registration(self, visualize: bool = False) -> Dict[str, Any]:
+    async def perform_coarse_registration(self, visualize: bool = False) -> Dict[str, Any]:
         """
         Perform coarse registration using SVD
 

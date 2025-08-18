@@ -289,7 +289,7 @@ class FineRegistration:
             "warning": point_count_warning
         }
 
-    def perform_fine_registration(self, id: int, coarse_transformation_matrix: np.ndarray,
+    async def perform_fine_registration(self, id: int, coarse_transformation_matrix: np.ndarray,
                                   downsample_factor: float = 1.0, visualize: bool = False) -> Dict[str, Any]:
         """
         Perform fine registration using ICP algorithm
@@ -316,7 +316,7 @@ class FineRegistration:
             }
 
         # Use the path for CT point cloud
-        ct_pc_path = f"CT_pc.npy"
+        ct_pc_path = self.config["CT_pc"]
 
         # Check if CT point cloud exists
         if not os.path.exists(ct_pc_path):
