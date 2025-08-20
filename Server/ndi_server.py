@@ -643,10 +643,8 @@ class NDI_Server():
             last_log_time = time.time()
 
             # Pre-calculate the inverse of fine transformation if available
-            fine_inverse = None
-            if self.fine_registration.get_fine_transformation_matrix() is not None:
-                fine_inverse = np.linalg.inv(self.fine_registration.get_fine_transformation_matrix())
-                self.logger.info("Using inverse of fine transformation for streaming")
+
+            combined_transformation = self.fine_registration.combined_transformation
 
             while not stop_event.is_set():
                 start_time = time.time()
@@ -658,44 +656,32 @@ class NDI_Server():
 
 
                     probe_matrix = tracking[self.config["tool_types"]["probe"]]
-                    endospcope_matrix= tracking[self.config["tool_types"]["endospcope"]]
-
-                    # Calculate probe tip position
-                    tool_tip = self.tip_vector
-                    if self.tool_calibration.get_tool_tip_vector() is not None:
-                        # Use calibrated tool tip if available
-                        calibrated_tip = self.tool_calibration.get_tool_tip_vector()
-                        tool_tip = np.append(calibrated_tip, 1.0)  # Convert to homogeneous coordinates
-
-                    tip_position = np.dot(probe_matrix, tool_tip)[:3]
+                    endospcope_matrix= tracking[self.config["tool_types"]["endoscope"]]
 
                     # Apply transformations
-                    transformed_position = tip_position
                     transformed_matrix = []
                     endoscope_transformed_matrix = []
-
-                    if self.combined_transformation is not None:
-                        # Create homogeneous position for combined transform
-                        homogeneous_pos = np.append(tip_position, 1.0)
-                        transformed_position = np.dot(self.combined_transformation, homogeneous_pos)[:3]
 
                     # Apply inverse of fine transformation from the left to make matrix
                     # relative to the registered coordinate system
 
-                    if fine_inverse is not None:
-                        transformed_matrix = np.linalg.inv(self.combined_transformation) @ probe_matrix
-                        endoscope_transformed_matrix = np.linalg.inv(self.combined_transformation) @ endospcope_matrix
+                    if combined_transformation is not None:
+                        if probe_matrix is not None:
+                            transformed_matrix = np.linalg.inv(combined_transformation) @ probe_matrix
+                        else:
+                            transformed_matrix = np.eye(4)
+
+                        if endospcope_matrix is not None:
+                            endoscope_transformed_matrix = np.linalg.inv(combined_transformation) @ endospcope_matrix
+                        else:
+                            endoscope_transformed_matrix = np.eye(4)
 
 
                     # Create data packet
                     data = {
-                        "position": transformed_position.tolist(),
                         "source": "ndi_tracker",
-                        "original": tip_position.tolist(),
                         "timestamp": time.time(),
                         "frame": frame_counter,
-                        # Quality information not available since GetPosition only returns tracking
-                        "matrix": probe_matrix.tolist(),  # Original matrix
                         "transformed_matrix": transformed_matrix.tolist(),
                         "endoscope_transformed_matrix":endoscope_transformed_matrix.tolist()
                     }
