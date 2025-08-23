@@ -326,6 +326,11 @@ class NDI_Server():
             """Get the current status of fine point gathering"""
             return self.fine_registration.get_fine_points_status()
 
+        @self.app.get("/get_coarse_points")
+        def get_fine_points_status():
+            """Get the current status of fine point gathering"""
+            return self.coarse_registration.get_coarse_points()
+
         @self.app.post("/reset_fine_gather")
         def reset_fine_gather():
             self.fine_registration.reset_fine_gather()
