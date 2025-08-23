@@ -226,7 +226,7 @@ class CoarseRegistration:
         # Convert to numpy arrays
         unity_points = np.array(self.coarse_points["unity_points"])
         ndi_points = np.array(self.coarse_points["ndi_points"])
-
+        logger.info(f"ndi points:{ndi_points}, unity points:{unity_points}")
         # Calculate centroids
         unity_centroid = np.mean(unity_points, axis=0)
         ndi_centroid = np.mean(ndi_points, axis=0)
@@ -237,7 +237,7 @@ class CoarseRegistration:
 
         # Calculate the correlation matrix
         H = np.dot(unity_centered.T, ndi_centered)
-
+        logger.info(f"before svd")
         try :
             # SVD decomposition
             U, S, Vt = np.linalg.svd(H)
@@ -246,6 +246,7 @@ class CoarseRegistration:
                 "status": "error",
                 "message": f"SVD failed"
             }
+        logger.info(f"after svd")
         # Calculate rotation matrix
         R = np.dot(Vt.T, U.T)
 
@@ -253,7 +254,7 @@ class CoarseRegistration:
         if np.linalg.det(R) < 0:
             Vt[-1, :] *= -1
             R = np.dot(Vt.T, U.T)
-
+        logger.info("Ensure proper rotation (no reflection)")
         # Calculate translation
         t = ndi_centroid - np.dot(R, unity_centroid)
 
@@ -262,6 +263,7 @@ class CoarseRegistration:
         transform[:3, :3] = R
         transform[:3, 3] = t
 
+        logger.info("Calculate registration error")
         # Calculate registration error
         transformed_unity = np.zeros_like(unity_points)
         for i in range(len(unity_points)):
@@ -270,6 +272,7 @@ class CoarseRegistration:
         mse = np.mean(np.sum((transformed_unity - ndi_points) ** 2, axis=1))
         rmse = np.sqrt(mse)
 
+        logger.info("Store the transformation matrix")
         # Store the transformation matrix
         self.transformation_matrix = transform
         save_state("saved_state.json", {"coarse_transform":transform})
@@ -280,7 +283,7 @@ class CoarseRegistration:
             "status": "not_requested",
             "message": "No visualization requested"
         }
-
+        logger.info("before visualization")
         # Visualize if requested
         if visualize:
             self._visualize_registration(unity_points, ndi_points, transform)
