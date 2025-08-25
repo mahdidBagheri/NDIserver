@@ -13,6 +13,8 @@ import socket
 from threading import Event
 import json
 
+import json
+import os
 # Import our custom modules
 from NDI.ndi_coarse_registration import CoarseRegistration
 from NDI.ndi_fine_registration import FineRegistration
@@ -26,7 +28,6 @@ class NDI_Server():
         self.config = config
         self.args = args
         self.app = FastAPI(title="NDI Tracking Server")
-        self.client_ip = "127.0.0.1"  # Default to localhost
         self.ndi_tracker_initialized = False
 
         # Streaming variables
@@ -54,6 +55,9 @@ class NDI_Server():
 
         self.define_logger()
         self._setup_routes()
+
+        self.client_ip = self.load_last_client_ip() if self.load_last_client_ip() is not None else "127.0.0.1"
+
     def define_logger(self):
         # Setup logging
         logging.basicConfig(
@@ -61,6 +65,22 @@ class NDI_Server():
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
+
+    def load_last_client_ip(self):
+        """Load the last client IP from saved state"""
+        state_file_path = "saved_state.json"
+        try:
+            if os.path.exists(state_file_path):
+                with open(state_file_path, 'r') as f:
+                    state_data = json.load(f)
+                    last_ip = state_data.get("last_client_ip")
+                    if last_ip:
+                        self.logger.info(f"Loaded last client IP from state: {last_ip}")
+                        return last_ip
+        except (json.JSONDecodeError, IOError) as e:
+            self.logger.error(f"Error loading state file: {e}")
+
+        return None
 
     def _setup_routes(self):
 
@@ -103,24 +123,57 @@ class NDI_Server():
             response = await call_next(request)
             return response
 
+
         @self.app.post("/set_client_ip")
-        def set_client_ip(ip: str):
-            """Manually set the client IP address for UDP streaming"""
+        def set_client_ip(request: Request):
+            """Automatically extract client IP from request and save to state file"""
+
+            # Extract client IP from request
+            client_ip = (
+                    request.headers.get("X-Forwarded-For", "").split(',')[0].strip() or
+                    request.headers.get("X-Real-IP", "") or
+                    request.client.host
+            )
 
             # Validate IP format
             try:
-                socket.inet_aton(ip)
-                client_ip = ip
-                self.logger.info(f"Manually set streaming target IP to: {client_ip}")
-                return {
-                    "status": "success",
-                    "message": f"Client IP set to {client_ip}",
-                    "client_ip": client_ip
-                }
+                socket.inet_aton(client_ip)
+                self.client_ip = client_ip
             except socket.error:
                 return {
-                    "status":"error",
-                    "details":"Invalid IP address format"
+                    "status": "error",
+                    "details": f"Invalid IP address format: {client_ip}"
+                }
+
+            # Load existing state file
+            state_file_path = "saved_state.json"
+            try:
+                if os.path.exists(state_file_path):
+                    with open(state_file_path, 'r') as f:
+                        state_data = json.load(f)
+                else:
+                    state_data = {}
+
+                # Update the client IP
+                state_data["last_client_ip"] = client_ip
+
+                # Save back to file
+                with open(state_file_path, 'w') as f:
+                    json.dump(state_data, f, indent=2)
+
+                self.logger.info(f"Client IP set to {client_ip} and saved to state file")
+
+                return {
+                    "status": "success",
+                    "message": f"Client IP set to {client_ip} and saved",
+                    "client_ip": client_ip
+                }
+
+            except (json.JSONDecodeError, IOError) as e:
+                self.logger.error(f"Error handling state file: {e}")
+                return {
+                    "status": "error",
+                    "details": f"Error saving client IP to state file: {str(e)}"
                 }
 
 
@@ -142,7 +195,7 @@ class NDI_Server():
                     "details": "initialization required"
                 }
 
-            self.ndi_tracking.start_streaming()
+            self.ndi_tracking.start_streaming(self.client_ip)
 
 
 
@@ -704,7 +757,7 @@ class NDI_Server():
                 # Send data packet via UDP to the client IP
                 packet = json.dumps(data).encode('utf-8')
                 try:
-                    sock.sendto(packet, ("192.168.31.69", port))
+                    sock.sendto(packet, (self.client_ip, port))
                 except Exception as e:
                     self.logger.error(f"Error sending UDP packet to {self.client_ip}:{port}: {str(e)}")
 
